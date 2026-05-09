@@ -9,3 +9,4 @@ export type {
   TouchEvent,
   BehaviorStreamReport,
 } from './reports';
+export type { FormDetectConfig, FormDetectionResult, FormSignalResults } from '../collectors/form-detector/types';

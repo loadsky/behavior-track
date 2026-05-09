@@ -72,6 +72,9 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
     is_tampered: !consistency.ua_consistent || iframe.is_overridden || !worker.is_consistent,
     is_proxy: false,
     ua_consistent: consistency.ua_consistent,
+    is_suspicious_form: false,
+    is_form_super_human: false,
+    is_form_cdp_mouse: false,
     risk_score: riskScore,
     signals: allSignals,
   };

@@ -1,4 +1,4 @@
-import type { SDKConfig, ResolvedConfig, EnvStaticReport, BehaviorStreamReport } from '../types';
+import type { SDKConfig, ResolvedConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig } from '../types';
 import { resolveConfig } from './config';
 import { EventBus } from './event-bus';
 import { Lifecycle } from './lifecycle';
@@ -8,6 +8,7 @@ import { getFingerprint } from '../collectors/fingerprint';
 import { collectWebRTC } from '../collectors/webrtc';
 import { collectEnvironment } from '../collectors/environment';
 import { BehaviorManager } from '../collectors/behavior';
+import { FormDetector } from '../collectors/form-detector';
 import { TransportManager } from '../transport';
 import { parseBrowser, getPageContext } from '../utils/browser';
 import { signReport } from '../utils/integrity';
@@ -20,6 +21,7 @@ export class BehaviorTrackSDK {
   private sessionId = '';
   private envPromise: Promise<EnvStaticReport> | null = null;
   private behaviorManager: BehaviorManager | null = null;
+  private formDetectors: FormDetector[] = [];
   private transport: TransportManager | null = null;
   private sequenceNo = 0;
 
@@ -58,6 +60,12 @@ export class BehaviorTrackSDK {
     this.eventBus.on('behavior:report', callback as (...args: unknown[]) => void);
   }
 
+  detect(config: FormDetectConfig): void {
+    if (this.lifecycle.state === 'destroyed') return;
+    const detector = new FormDetector(config);
+    this.formDetectors.push(detector);
+  }
+
   pause(): void {
     this.lifecycle.pause();
     this.behaviorManager?.stop();
@@ -72,6 +80,10 @@ export class BehaviorTrackSDK {
     this.lifecycle.destroy();
     this.behaviorManager?.stop();
     this.behaviorManager = null;
+    for (const fd of this.formDetectors) {
+      fd.destroy();
+    }
+    this.formDetectors = [];
     this.transport?.flush();
     this.transport = null;
     this.eventBus.clear();
@@ -115,16 +127,54 @@ export class BehaviorTrackSDK {
         is_tampered: false,
         is_proxy: false,
         ua_consistent: true,
+        is_suspicious_form: false,
+        is_form_super_human: false,
+        is_form_cdp_mouse: false,
         risk_score: 0,
         signals: [],
       },
       integrity_check: '',
     };
 
+    // 合并表单检测信号
+    const ri = report.risk_indicators;
+    let formSuspicious = false;
+    let formSuperHuman = false;
+    let formCDPMouse = false;
+    const formSignalStrings: string[] = [];
+
+    for (const fd of this.formDetectors) {
+      const sigs = fd.getSignals();
+      if (sigs.is_suspicious_form) formSuspicious = true;
+      if (sigs.is_form_super_human) formSuperHuman = true;
+      if (sigs.is_form_cdp_mouse) formCDPMouse = true;
+      formSignalStrings.push(...sigs.signalStrings);
+    }
+
+    ri.is_suspicious_form = formSuspicious;
+    ri.is_form_super_human = formSuperHuman;
+    ri.is_form_cdp_mouse = formCDPMouse;
+    ri.signals = [...ri.signals, ...formSignalStrings];
+    ri.risk_score = this.computeUpdatedRiskScore(ri.risk_score, formSuspicious, formSuperHuman, formCDPMouse);
+
     report.integrity_check = signReport(report as unknown as Record<string, unknown>);
 
     this.transport?.send(report);
     return report;
+  }
+
+  private computeUpdatedRiskScore(baseScore: number, formSuspicious: boolean, formSuperHuman: boolean, formCDPMouse: boolean): number {
+    const signals: { weight: number }[] = [];
+    if (formSuspicious) signals.push({ weight: 35 });
+    if (formSuperHuman) signals.push({ weight: 30 });
+    if (formCDPMouse) signals.push({ weight: 25 });
+
+    signals.sort((a, b) => b.weight - a.weight);
+    let score = baseScore;
+    for (let i = 0; i < signals.length; i++) {
+      score += signals[i].weight * Math.pow(0.6, i);
+    }
+    return Math.min(Math.round(score), 100);
   }
 
   private setupBatchFlush(): void {

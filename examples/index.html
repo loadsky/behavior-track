@@ -273,64 +273,71 @@
             </h2>
           </div>
           <div class="p-5">
-            <form @submit.prevent="handleFormSubmit" class="max-w-sm space-y-4">
+            <form id="login-form" class="max-w-sm space-y-4" @submit.prevent>
               <div>
                 <label class="block text-xs text-gray-500 mb-1">邮箱</label>
-                <input type="email" ref="emailField" autocomplete="off"
-                  class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors"
-                  @focus="onFieldFocus('email')" @click="onFieldClick('email', $event)" @keydown="onFieldKeydown" @input="onFieldInput">
+                <input id="login-email" type="email" autocomplete="off"
+                  class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors">
               </div>
               <div>
                 <label class="block text-xs text-gray-500 mb-1">密码</label>
-                <input type="password" ref="pwdField" autocomplete="off"
-                  class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors"
-                  @focus="onFieldFocus('password')" @click="onFieldClick('password', $event)" @keydown="onFieldKeydown" @input="onFieldInput"
-                  @keydown.enter="onEnterSubmit">
+                <input id="login-password" type="password" autocomplete="off"
+                  class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors">
               </div>
-              <button type="submit"
+              <button id="login-btn" type="submit"
                 class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
-                @click="onSubmitClick($event)">
+                @click="handleLogin">
                 登录
               </button>
+              <p v-if="loginHint" class="mt-2 text-xs text-amber-600">{{ loginHint }}</p>
             </form>
 
-            <!-- 表单行为分析结果 -->
-            <div v-if="formAnalysis.show" class="mt-5 pt-4 border-t border-gray-100 space-y-2">
-              <p class="text-xs font-medium text-gray-600">表单交互分析</p>
+            <!-- SDK 表单检测结果 -->
+            <div v-if="formResult" class="mt-5 pt-4 border-t border-gray-100 space-y-2">
+              <p class="text-xs font-medium text-gray-600">SDK 表单检测结果 (detect)</p>
               <div class="grid grid-cols-2 gap-2 text-xs">
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
-                  <span class="text-gray-500">填写耗时</span>
-                  <span class="font-mono">{{ formAnalysis.fillDuration }}ms</span>
+                  <span class="text-gray-500">判定</span>
+                  <span class="font-mono" :class="formResult.is_pass ? 'text-green-600' : 'text-red-600'">{{ formResult.is_pass ? '通过' : '可疑' }}</span>
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
-                  <span class="text-gray-500">提交方式</span>
-                  <span class="font-mono">{{ formAnalysis.submitMethod }}</span>
+                  <span class="text-gray-500">风险评分</span>
+                  <span class="font-mono">{{ formResult.risk_score }}/100</span>
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
-                  <span class="text-gray-500">邮箱点击偏移</span>
-                  <span class="font-mono" :class="formAnalysis.emailClickCenter ? 'text-red-600' : ''">{{ formAnalysis.emailClickCenter ? '正中 (可疑)' : formAnalysis.emailClickOffset || '未点击' }}</span>
+                  <span class="text-gray-500">可疑行为</span>
+                  <span class="font-mono" :class="formResult.signals.suspicious_client_side_behavior ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.suspicious_client_side_behavior ? '检测到' : '无' }}</span>
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
-                  <span class="text-gray-500">密码点击偏移</span>
-                  <span class="font-mono" :class="formAnalysis.pwdClickCenter ? 'text-red-600' : ''">{{ formAnalysis.pwdClickCenter ? '正中 (可疑)' : formAnalysis.pwdClickOffset || '未点击' }}</span>
+                  <span class="text-gray-500">超人类速度</span>
+                  <span class="font-mono" :class="formResult.signals.super_human_speed ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.super_human_speed ? '检测到' : '无' }}</span>
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
-                  <span class="text-gray-500">修饰键</span>
-                  <span class="font-mono" :class="formAnalysis.usedModifier ? 'text-red-600' : ''">{{ formAnalysis.usedModifier ? '使用了 (可疑)' : '未使用' }}</span>
+                  <span class="text-gray-500">CDP 鼠标泄露</span>
+                  <span class="font-mono" :class="formResult.signals.has_cdp_mouse_leak ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.has_cdp_mouse_leak ? '检测到' : '无' }}</span>
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
-                  <span class="text-gray-500">Tab 切换</span>
-                  <span class="font-mono">{{ formAnalysis.tabUsed ? '是' : '否 (鼠标点击)' }}</span>
+                  <span class="text-gray-500">时间戳</span>
+                  <span class="font-mono">{{ new Date(formResult.timestamp).toLocaleTimeString() }}</span>
+                </div>
+              </div>
+
+              <!-- 问题列表 -->
+              <div v-if="formResult.issues.length" class="mt-2">
+                <p class="text-xs text-gray-500 mb-1">检测到的问题:</p>
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="issue in formResult.issues" :key="issue"
+                    class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">{{ issue }}</span>
                 </div>
               </div>
 
               <!-- 表单风控结论 -->
               <div class="mt-3 rounded-lg px-4 py-3"
-                :class="formAnalysis.risk ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'">
-                <p class="text-xs font-medium">{{ formAnalysis.risk ? '风控提示' : '通过' }}: {{ formAnalysis.conclusion }}</p>
+                :class="!formResult.is_pass ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'">
+                <p class="text-xs font-medium">{{ !formResult.is_pass ? '风控拦截' : '通过' }}: {{ formResult.is_pass ? '未发现自动化工具特征' : '检测到自动化工具特征' }}</p>
               </div>
             </div>
-            <p v-else class="text-xs text-gray-400 mt-4">填写表单并点击登录，查看交互行为分析结果</p>
+            <p v-else class="text-xs text-gray-400 mt-4">填写表单并点击登录，查看 SDK 内置检测结果</p>
           </div>
         </section>
 
@@ -439,7 +446,7 @@
             appId: 'demo-test-app',
             enableFingerprint: true,
             enableEnvironment: true,
-            enableBehavior: true,
+            enableBehavior: false,
             batchInterval: 3000,
             batchSize: 20,
             debug: true,
@@ -474,21 +481,9 @@
           _mouseTracks: [],
           _keyIntervals: [],
 
-          // 表单分析
-          formAnalysis: {
-            show: false,
-            risk: false,
-            conclusion: '',
-            fillDuration: 0,
-            submitMethod: '',
-            emailClickCenter: false,
-            emailClickOffset: '',
-            pwdClickCenter: false,
-            pwdClickOffset: '',
-            usedModifier: false,
-            tabUsed: false,
-          },
-          _formState: { hadInput: false, hadKeydown: false, firstInputTime: 0, lastFocus: '', tabPressed: false, modifierUsed: false },
+          // SDK 表单检测结果
+          formResult: null,
+          loginHint: '',
           transportLogs: [],
           envError: '',
           riskLabels: [
@@ -551,6 +546,7 @@
             });
             this.sdkState = 'active';
             this.envError = '';
+            this.loginHint = '';
             this.resetBehaviorRisk();
             this.log('SDK 初始化成功');
 
@@ -562,6 +558,42 @@
               this.counts.report++;
               this.behaviorPreview = JSON.stringify(data, null, 2);
               this.analyzeBehavior(data.data_stream);
+            });
+
+            // 原因标识 → 人类可读文本映射
+            this._issueLabels = {
+              // suspiciousClientSideBehavior
+              no_keyboard_but_value: '无键盘事件但字段有值',
+              center_corner_click: '点击在正中/四角比例过高',
+              same_click_offset: '不同字段点击偏移一致',
+              no_mouse_before_click: '点击前无鼠标移动',
+              no_tab_no_click_switch: '多字段填充但无Tab或鼠标切换',
+              parallel_fill: '字段填充间隔过短',
+              untrusted_events: '存在非受信事件',
+              // superHumanSpeed
+              fill_too_fast: '填写过快',
+              batch_assign: '批量赋值',
+              typing_too_fast: '打字速度超人类',
+              uniform_intervals: '按键间隔过于均匀',
+              orphan_keydown: '孤立keydown事件',
+              // hasCDPMouseLeak
+              zero_coord_click: '零坐标点击',
+              integer_coords: '整数坐标比例过高',
+              coord_inconsistent: '坐标系统不一致',
+              offset_anomaly: 'offset坐标异常',
+            };
+
+            // 使用 SDK 内置表单检测
+            BehaviorTrack.detect({
+              containerSelector: '#login-form',
+              actionSelector: '#login-btn',
+              onResult: (result) => {
+                // 将原因标识映射为可读文本
+                const labels = result.issues.map(c => this._issueLabels[c] || c);
+                this.formResult = { ...result, issues: labels };
+                this.log(`表单检测数据: ${JSON.stringify(result, null, 2)}`);
+                this.log(`SDK 表单检测: ${result.is_pass ? '通过' : '可疑'} — 评分 ${result.risk_score}/100${labels.length ? ' — ' + labels.join('; ') : ''}`);
+              },
             });
 
             await this.refreshEnv();
@@ -595,104 +627,10 @@
           this.behaviorRisk = { score: 100, total: 0, trusted_count: 0, untrusted_events: 0, untrusted_ratio: 0, mouse_linear: false, kbd_uniform: false, zero_clicks: 0, signals: [] };
           this._mouseTracks = [];
           this._keyIntervals = [];
-          this.formAnalysis = { show: false, risk: false, conclusion: '', fillDuration: 0, submitMethod: '', emailClickCenter: false, emailClickOffset: '', pwdClickCenter: false, pwdClickOffset: '', usedModifier: false, tabUsed: false };
-          this._formState = { hadInput: false, hadKeydown: false, firstInputTime: 0, lastFocus: '', tabPressed: false, modifierUsed: false };
+          this.formResult = null;
         },
 
-        // --- 表单交互分析 ---
-        onFieldFocus(field) {
-          if (this._formState.lastFocus !== field) this._formState.lastFocus = field;
-          if (field === 'password' && !this._formState.tabPressed) {
-            // 如果 firstKeyTime 还没设置，说明还没开始输入
-          }
-        },
-
-        onFieldClick(field, e) {
-          if (!e.isTrusted) return;
-          if (field === 'email' && this._formState.lastFocus !== 'email') this._formState.tabPressed = false;
-          if (field === 'password' && this._formState.lastFocus !== 'password') this._formState.tabPressed = false;
-          // 记录点击位置偏移
-          const el = e.target;
-          const rect = el.getBoundingClientRect();
-          const cx = rect.left + rect.width / 2;
-          const cy = rect.top + rect.height / 2;
-          const dx = Math.abs(e.clientX - cx);
-          const dy = Math.abs(e.clientY - cy);
-          const isCenter = dx <= 3 && dy <= 3;
-          if (field === 'email') { this.formAnalysis.emailClickCenter = isCenter; this.formAnalysis.emailClickOffset = `dx=${Math.round(dx)} dy=${Math.round(dy)}`; }
-          if (field === 'password') { this.formAnalysis.pwdClickCenter = isCenter; this.formAnalysis.pwdClickOffset = `dx=${Math.round(dx)} dy=${Math.round(dy)}`; }
-        },
-
-        onFieldKeydown(e) {
-          if (!this._formState.hadKeydown) this._formState.hadKeydown = true;
-          if (e.key === 'Tab') this._formState.tabPressed = true;
-          if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) this._formState.modifierUsed = true;
-        },
-
-        onFieldInput() {
-          if (!this._formState.hadInput) {
-            this._formState.hadInput = true;
-            this._formState.firstInputTime = performance.now();
-          }
-        },
-
-        onEnterSubmit() {
-          this._submitMethod = 'Enter';
-        },
-
-        onSubmitClick(e) {
-          if (e.isTrusted) this._submitMethod = 'click';
-        },
-
-        handleFormSubmit() {
-          const endTime = performance.now();
-          const duration = this._formState.firstInputTime ? Math.round(endTime - this._formState.firstInputTime) : 0;
-          const method = this._submitMethod || 'click';
-
-          const issues = [];
-          // 表单有值但无 keydown 事件 → 程序填充
-          if (this._formState.hadInput && !this._formState.hadKeydown) {
-            issues.push('无键盘事件 (程序填充)');
-          }
-          // 填写时间过短（人类无法在 500ms 内完成输入）
-          if (this._formState.hadInput && duration > 0 && duration < 500) {
-            issues.push(`填写时间过短 (${duration}ms)`);
-          }
-          // 填写时间极快（200ms 以下基本是自动填充）
-          if (this._formState.hadInput && duration === 0) {
-            issues.push('无输入时间记录 (批量赋值)');
-          }
-          // 点击在输入框正中（自动化工具常见行为）
-          if (this.formAnalysis.emailClickCenter) issues.push('邮箱点击在输入框正中');
-          if (this.formAnalysis.pwdClickCenter) issues.push('密码点击在输入框正中');
-          // 使用了修饰键（Ctrl+V 粘贴等）
-          if (this._formState.modifierUsed) issues.push('使用了修饰键 (Ctrl/Shift/Meta)');
-          // Enter 提交但未点击
-          if (method === 'Enter' && !this._formState.tabPressed) issues.push('Enter 提交未使用 Tab 切换');
-
-          const isRisky = issues.length >= 2;
-
-          Object.assign(this.formAnalysis, {
-            show: true,
-            risk: isRisky,
-            conclusion: isRisky ? issues.join('; ') : '交互模式自然，未检测到自动化特征',
-            fillDuration: duration,
-            submitMethod: method,
-            usedModifier: this._formState.modifierUsed,
-            tabUsed: this._formState.tabPressed,
-          });
-
-          // 将表单风控信号传递给行为风控
-          if (isRisky && !this.behaviorRisk.signals.includes('form_suspicious')) {
-            this.behaviorRisk.signals.push('form_suspicious');
-            this.behaviorRisk.score = Math.max(0, this.behaviorRisk.score - 25);
-          }
-          if (!isRisky && !this.behaviorRisk.signals.includes('form_normal')) {
-            this.behaviorRisk.signals.push('form_normal');
-          }
-
-          this.log(`表单提交分析: ${isRisky ? '可疑' : '正常'} — ${this.formAnalysis.conclusion}`);
-        },
+        // --- 表单检测（由 SDK FormDetector 处理） ---
 
         analyzeBehavior(stream) {
           const risk = this.behaviorRisk;
@@ -801,10 +739,19 @@
           }
         },
 
+        handleLogin() {
+          if (this.sdkState !== 'active') {
+            this.loginHint = '请先点击上方「初始化」按钮启动 SDK';
+            return;
+          }
+          this.loginHint = '';
+        },
+
       },
 
       created() {
         this.interceptConsoleLog();
+        this.initSDK();
       },
     });
 

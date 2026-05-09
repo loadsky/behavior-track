@@ -13,6 +13,9 @@ export interface RiskIndicators {
   is_tampered: boolean;
   is_proxy: boolean;
   ua_consistent: boolean;
+  is_suspicious_form: boolean;
+  is_form_super_human: boolean;
+  is_form_cdp_mouse: boolean;
   risk_score: number;
   signals: string[];
 }
