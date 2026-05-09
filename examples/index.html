@@ -264,43 +264,21 @@
           </div>
         </section>
 
-        <!-- 鼠标追踪测试 -->
+        <!-- 行为采集提示 -->
         <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div class="px-5 py-4 border-b border-gray-100">
-            <h2 class="text-sm font-semibold text-gray-900">鼠标追踪测试</h2>
+            <h2 class="text-sm font-semibold text-gray-900">行为采集测试</h2>
           </div>
           <div class="p-5">
-            <div @mousemove="onMouseMove"
-              class="rounded-xl border-2 border-dashed border-gray-300 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors p-8 min-h-[200px] flex items-center justify-center cursor-crosshair select-none text-sm text-gray-400">
-              在此区域移动鼠标、点击来测试鼠标追踪
-            </div>
-            <p class="text-xs text-gray-400 mt-3 font-mono">{{ mousePos }}</p>
-          </div>
-        </section>
-
-        <!-- 键盘时序测试 -->
-        <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div class="px-5 py-4 border-b border-gray-100">
-            <h2 class="text-sm font-semibold text-gray-900">键盘时序测试</h2>
-          </div>
-          <div class="p-5">
-            <textarea
-              rows="3" placeholder="在此输入文字，测试按键时序采集（仅记录时间间隔，不记录具体键值）"
-              class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors"></textarea>
-            <p class="text-xs text-gray-400 mt-2 font-mono">{{ keyboardInfo }}</p>
-          </div>
-        </section>
-
-        <!-- 滚动测试 -->
-        <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div class="px-5 py-4 border-b border-gray-100">
-            <h2 class="text-sm font-semibold text-gray-900">滚动测试</h2>
-          </div>
-          <div class="p-5">
-            <div class="h-72 overflow-y-auto rounded-lg border border-gray-200 p-4 text-sm text-gray-400">
-              <p class="mb-[600px]">向下滚动此区域以测试滚动追踪</p>
-              <p class="text-gray-200 mb-4 select-none" v-text="scrollFiller"></p>
-              <p class="font-medium text-gray-500">滚动区域结束 ↑ 可向上滚回</p>
+            <div class="rounded-xl bg-indigo-50 border border-indigo-200 p-6 text-sm text-indigo-700 space-y-3">
+              <p class="font-medium">行为追踪模块已在页面全局监听以下事件：</p>
+              <ul class="space-y-2 list-disc list-inside text-indigo-600">
+                <li><strong>鼠标追踪</strong> — 在页面任意位置移动鼠标、点击，采集轨迹与速度</li>
+                <li><strong>键盘时序</strong> — 在页面任意位置输入文字，采集按键间隔（不记录键值）</li>
+                <li><strong>滚动行为</strong> — 滚动页面任意区域，采集方向与速度</li>
+                <li><strong>触摸事件</strong> — 在触屏设备上操作，采集压力与多点信息</li>
+              </ul>
+              <p class="text-indigo-400 text-xs">请在上方 <strong>SDK 控制</strong> 中初始化并开启行为追踪，然后在页面进行相应操作，观察统计数据变化。</p>
             </div>
           </div>
         </section>
@@ -353,8 +331,6 @@
           },
           counts: { mouse: 0, keyboard: 0, scroll: 0, touch: 0, report: 0 },
           behaviorPreview: '等待行为上报...',
-          keyboardInfo: '等待键盘输入...',
-          mousePos: '坐标: -',
           transportLogs: [],
           envError: '',
           riskLabels: [
@@ -386,9 +362,6 @@
         statusDot() {
           const map = { idle: 'bg-yellow-400', active: 'bg-green-400', paused: 'bg-yellow-400', destroyed: 'bg-red-400' };
           return map[this.sdkState] || 'bg-gray-400';
-        },
-        scrollFiller() {
-          return Array(40).fill('████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████').join('\n');
         },
       },
 
@@ -429,9 +402,6 @@
               this.counts.touch += data.data_stream.touch_events.length;
               this.counts.report++;
               this.behaviorPreview = JSON.stringify(data, null, 2);
-              this.keyboardInfo = data.data_stream.keyboard_stream.length > 0
-                ? `最近按键批次: ${data.data_stream.keyboard_stream.length} 个采样周期`
-                : '等待键盘输入...';
             });
 
             await this.refreshEnv();
@@ -483,9 +453,6 @@
           }
         },
 
-        onMouseMove(e) {
-          this.mousePos = `坐标: x=${e.clientX}, y=${e.clientY}`;
-        },
       },
 
       created() {
