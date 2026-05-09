@@ -278,13 +278,13 @@
                 <label class="block text-xs text-gray-500 mb-1">邮箱</label>
                 <input type="email" ref="emailField" autocomplete="off"
                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors"
-                  @focus="onFieldFocus('email')" @click="onFieldClick('email', $event)" @keydown="onFieldKeydown">
+                  @focus="onFieldFocus('email')" @click="onFieldClick('email', $event)" @keydown="onFieldKeydown" @input="onFieldInput">
               </div>
               <div>
                 <label class="block text-xs text-gray-500 mb-1">密码</label>
                 <input type="password" ref="pwdField" autocomplete="off"
                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors"
-                  @focus="onFieldFocus('password')" @click="onFieldClick('password', $event)" @keydown="onFieldKeydown"
+                  @focus="onFieldFocus('password')" @click="onFieldClick('password', $event)" @keydown="onFieldKeydown" @input="onFieldInput"
                   @keydown.enter="onEnterSubmit">
               </div>
               <button type="submit"
@@ -488,7 +488,7 @@
             usedModifier: false,
             tabUsed: false,
           },
-          _formState: { typed: false, firstKeyTime: 0, lastFocus: '', tabPressed: false, modifierUsed: false },
+          _formState: { hadInput: false, hadKeydown: false, firstInputTime: 0, lastFocus: '', tabPressed: false, modifierUsed: false },
           transportLogs: [],
           envError: '',
           riskLabels: [
@@ -596,7 +596,7 @@
           this._mouseTracks = [];
           this._keyIntervals = [];
           this.formAnalysis = { show: false, risk: false, conclusion: '', fillDuration: 0, submitMethod: '', emailClickCenter: false, emailClickOffset: '', pwdClickCenter: false, pwdClickOffset: '', usedModifier: false, tabUsed: false };
-          this._formState = { typed: false, firstKeyTime: 0, lastFocus: '', tabPressed: false, modifierUsed: false };
+          this._formState = { hadInput: false, hadKeydown: false, firstInputTime: 0, lastFocus: '', tabPressed: false, modifierUsed: false };
         },
 
         // --- 表单交互分析 ---
@@ -624,12 +624,16 @@
         },
 
         onFieldKeydown(e) {
-          if (!this._formState.typed) {
-            this._formState.typed = true;
-            this._formState.firstKeyTime = performance.now();
-          }
+          if (!this._formState.hadKeydown) this._formState.hadKeydown = true;
           if (e.key === 'Tab') this._formState.tabPressed = true;
           if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) this._formState.modifierUsed = true;
+        },
+
+        onFieldInput() {
+          if (!this._formState.hadInput) {
+            this._formState.hadInput = true;
+            this._formState.firstInputTime = performance.now();
+          }
         },
 
         onEnterSubmit() {
@@ -642,12 +646,22 @@
 
         handleFormSubmit() {
           const endTime = performance.now();
-          const duration = this._formState.firstKeyTime ? Math.round(endTime - this._formState.firstKeyTime) : 0;
+          const duration = this._formState.firstInputTime ? Math.round(endTime - this._formState.firstInputTime) : 0;
           const method = this._submitMethod || 'click';
 
           const issues = [];
-          // 填写时间过短（可能是自动填充）
-          if (this._formState.typed && duration < 500) issues.push('填写时间过短 (<500ms)');
+          // 表单有值但无 keydown 事件 → 程序填充
+          if (this._formState.hadInput && !this._formState.hadKeydown) {
+            issues.push('无键盘事件 (程序填充)');
+          }
+          // 填写时间过短（人类无法在 500ms 内完成输入）
+          if (this._formState.hadInput && duration > 0 && duration < 500) {
+            issues.push(`填写时间过短 (${duration}ms)`);
+          }
+          // 填写时间极快（200ms 以下基本是自动填充）
+          if (this._formState.hadInput && duration === 0) {
+            issues.push('无输入时间记录 (批量赋值)');
+          }
           // 点击在输入框正中（自动化工具常见行为）
           if (this.formAnalysis.emailClickCenter) issues.push('邮箱点击在输入框正中');
           if (this.formAnalysis.pwdClickCenter) issues.push('密码点击在输入框正中');
