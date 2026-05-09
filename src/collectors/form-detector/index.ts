@@ -157,6 +157,7 @@ export class FormDetector {
           hadInput: false,
           hadKeydown: false,
           hadKeyup: false,
+          inputTrusted: true,
           firstInputTime: 0,
           lastInputTime: 0,
           clickCount: 0,
@@ -256,8 +257,11 @@ export class FormDetector {
 
     if (!state.hadInput) {
       state.hadInput = true;
+      state.inputTrusted = e.isTrusted;
       state.firstInputTime = now;
       if (this.firstInputTime === 0) this.firstInputTime = now;
+    } else if (!e.isTrusted) {
+      state.inputTrusted = false;
     }
 
     state.lastInputTime = now;
@@ -375,10 +379,10 @@ export class FormDetector {
     this._scbCodes = [];
     const checks: boolean[] = [];
 
-    // 1. 有值但无键盘事件
+    // 1. 有值但无键盘事件（仅非可信 input 事件视为可疑，排除浏览器自动填充）
     const noKbdFields: string[] = [];
     for (const [, state] of this.fieldStates) {
-      if (state.hadInput && !state.hadKeydown && state.totalChars > 0) {
+      if (state.hadInput && !state.hadKeydown && !state.inputTrusted && state.totalChars > 0) {
         noKbdFields.push(state.fieldName);
       }
     }
@@ -419,14 +423,15 @@ export class FormDetector {
       checks.push(true);
     }
 
-    // 5. 多字段无 Tab 且无鼠标点击切换
+    // 5. 多字段无 Tab 且无鼠标点击切换（仅非可信 input 视为可疑）
     const fieldsWithInput: FieldState[] = [];
     for (const [, state] of this.fieldStates) {
       if (state.hadInput && state.totalChars > 0) fieldsWithInput.push(state);
     }
-    if (fieldsWithInput.length >= 2) {
+    const untrustedFields = fieldsWithInput.filter(s => !s.inputTrusted);
+    if (untrustedFields.length >= 2) {
       let hasTabOrClick = false;
-      for (const s of fieldsWithInput) {
+      for (const s of untrustedFields) {
         if (s.tabPressed || s.hadClick) hasTabOrClick = true;
       }
       if (!hasTabOrClick) {
@@ -435,10 +440,14 @@ export class FormDetector {
       }
     }
 
-    // 6. 并行填充
-    const inputTimes = fieldsWithInput.map(s => s.firstInputTime).filter(t => t > 0).sort((a, b) => a - b);
-    if (inputTimes.length >= 2) {
-      const minInterval = inputTimes[1] - inputTimes[0];
+    // 6. 并行填充（仅非可信 input 视为可疑）
+    const untrustedInputTimes = fieldsWithInput
+      .filter(s => !s.inputTrusted)
+      .map(s => s.firstInputTime)
+      .filter(t => t > 0)
+      .sort((a, b) => a - b);
+    if (untrustedInputTimes.length >= 2) {
+      const minInterval = untrustedInputTimes[1] - untrustedInputTimes[0];
       if (minInterval < 100) {
         this._scbCodes.push(ScbCodes.PARALLEL_FILL);
         checks.push(true);
@@ -481,8 +490,9 @@ export class FormDetector {
       checks.push(true);
     }
 
-    // 2. 极速填写（无时间差=批量赋值）
-    if (fillDuration === 0 && totalChars > 0) {
+    // 2. 极速填写（无时间差=批量赋值，仅非可信 input 视为可疑）
+    const untrustedInputCount = fieldsWithInput.filter(s => !s.inputTrusted).length;
+    if (fillDuration === 0 && totalChars > 0 && untrustedInputCount > 0) {
       this._shsCodes.push(ShsCodes.BATCH_ASSIGN);
       checks.push(true);
     }
