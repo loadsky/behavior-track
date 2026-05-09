@@ -755,7 +755,7 @@
       },
     });
 
-    app.mount('#app');
+    window.vm = app.mount('#app'); // 暴露 Vue 实例到全局，方便调试
   </script>
 </body>
 </html>
