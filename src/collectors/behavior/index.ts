@@ -18,6 +18,7 @@ export class BehaviorManager {
   private scroll: ScrollTracker;
   private touch: TouchTracker;
   private _config: ResolvedConfig;
+  private _sampled: boolean | null = null;
 
   constructor(config: ResolvedConfig) {
     this._config = config;
@@ -44,15 +45,20 @@ export class BehaviorManager {
   }
 
   drain(): BehaviorStream {
-    return {
+    const stream: BehaviorStream = {
       mouse_tracks: this.mouse.drain(),
       keyboard_stream: this.keyboard.drain(),
       scroll_events: this.scroll.drain(),
       touch_events: this.touch.drain(),
     };
+    this._sampled = null;
+    return stream;
   }
 
   private shouldSample(): boolean {
-    return Math.random() < this._config.behaviorSampleRate;
+    if (this._sampled === null) {
+      this._sampled = Math.random() < this._config.behaviorSampleRate;
+    }
+    return this._sampled;
   }
 }

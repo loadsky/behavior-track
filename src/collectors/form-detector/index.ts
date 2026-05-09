@@ -95,12 +95,9 @@ export class FormDetector {
   private bindContainer(container: HTMLElement): void {
     this.scanFields();
 
-    this.on(container, 'focusin', this.handleFieldFocus);
     this.on(container, 'click', this.handleFieldClick);
     this.on(container, 'input', this.handleFieldInput);
     this.on(container, 'keydown', this.handleFieldKeydown);
-    this.on(container, 'keyup', this.handleFieldKeyup);
-    this.on(container, 'mousemove', this.handleMouseMove);
     this.on(document, 'keydown', this.handleGlobalKeydown);
     this.on(document, 'keyup', this.handleGlobalKeyup);
     this.on(document, 'mousemove', this.handleGlobalMouseMove);
@@ -152,11 +149,9 @@ export class FormDetector {
         this.fieldStates.set(el, {
           fieldName: (el as HTMLInputElement).name || (el as HTMLInputElement).id || el.tagName,
           element: el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
-          hadFocus: false,
           hadClick: false,
           hadInput: false,
           hadKeydown: false,
-          hadKeyup: false,
           inputTrusted: true,
           firstInputTime: 0,
           lastInputTime: 0,
@@ -165,7 +160,6 @@ export class FormDetector {
           clickCorner: false,
           clickOffsetKey: '',
           tabPressed: false,
-          modifierUsed: false,
           totalChars: 0,
         });
       }
@@ -191,9 +185,6 @@ export class FormDetector {
   }
 
   // ========== 事件处理 ==========
-
-  private handleFieldFocus = (_e: Event): void => {
-  };
 
   private handleFieldClick = (e: Event): void => {
     const me = e as MouseEvent;
@@ -277,14 +268,7 @@ export class FormDetector {
     if (state) {
       state.hadKeydown = true;
       if (ke.key === 'Tab') state.tabPressed = true;
-      if (ke.shiftKey || ke.altKey || ke.ctrlKey || ke.metaKey) state.modifierUsed = true;
     }
-  };
-
-  private handleFieldKeyup = (e: Event): void => {
-    const target = e.target as Element;
-    const state = this.fieldStates.get(target);
-    if (state) state.hadKeyup = true;
   };
 
   private handleGlobalKeydown = (e: Event): void => {
@@ -304,9 +288,6 @@ export class FormDetector {
         break;
       }
     }
-  };
-
-  private handleMouseMove = (_e: Event): void => {
   };
 
   private handleGlobalMouseMove = (e: Event): void => {

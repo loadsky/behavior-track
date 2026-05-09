@@ -13,6 +13,8 @@ export class KeyboardTracker {
 
   start(): void {
     const onKeyDown = (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key.length !== 1) return;
       const now = Date.now();
       if (this.lastKeyTime > 0) {
         this.intervalSum += now - this.lastKeyTime;
@@ -23,7 +25,9 @@ export class KeyboardTracker {
       if (e.isTrusted) this.trustedCount++;
     };
 
-    const onKeyUp = () => {
+    const onKeyUp = (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key.length !== 1) return;
       if (this.holdStart > 0) {
         this.holdSum += Date.now() - this.holdStart;
         this.holdStart = 0;

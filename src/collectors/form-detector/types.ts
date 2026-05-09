@@ -58,11 +58,9 @@ export interface FormSignalResults {
 export interface FieldState {
   fieldName: string;
   element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-  hadFocus: boolean;
   hadClick: boolean;
   hadInput: boolean;
   hadKeydown: boolean;
-  hadKeyup: boolean;
   inputTrusted: boolean;
   firstInputTime: number;
   lastInputTime: number;
@@ -71,7 +69,6 @@ export interface FieldState {
   clickCorner: boolean;
   clickOffsetKey: string;
   tabPressed: boolean;
-  modifierUsed: boolean;
   totalChars: number;
 }
 

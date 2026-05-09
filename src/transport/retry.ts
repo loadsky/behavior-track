@@ -12,7 +12,6 @@ const DEFAULT_OPTIONS: RetryOptions = {
 
 export class RetryQueue {
   private options: RetryOptions;
-  private pending: Array<{ payload: unknown; attempts: number }> = [];
 
   constructor(options?: Partial<RetryOptions>) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -35,15 +34,6 @@ export class RetryQueue {
 
     console.warn('[BehaviorTrack] max retries exceeded, dropping payload');
     return false;
-  }
-
-  addToPending(payload: unknown): void {
-    this.pending.push({ payload, attempts: 0 });
-  }
-
-  drainPending(): Array<{ payload: unknown; attempts: number }> {
-    const items = this.pending.splice(0);
-    return items;
   }
 
   private getDelay(attempt: number): number {

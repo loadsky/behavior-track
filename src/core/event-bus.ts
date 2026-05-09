@@ -10,10 +10,6 @@ export class EventBus {
     this.listeners.get(event)!.add(handler);
   }
 
-  off(event: string, handler: Handler): void {
-    this.listeners.get(event)?.delete(handler);
-  }
-
   emit(event: string, ...args: unknown[]): void {
     this.listeners.get(event)?.forEach((handler) => {
       try {

@@ -2,7 +2,7 @@ import type { SDKConfig, ResolvedConfig, EnvStaticReport, BehaviorStreamReport, 
 import { resolveConfig } from './config';
 import { EventBus } from './event-bus';
 import { Lifecycle } from './lifecycle';
-import { generateSessionId } from '../utils/id';
+import { generateSessionId } from '../utils/generate-id';
 import { getDeviceId } from '../storage/device-id';
 import { getFingerprint } from '../collectors/fingerprint';
 import { collectWebRTC } from '../collectors/webrtc';
