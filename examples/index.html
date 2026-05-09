@@ -267,6 +267,64 @@
         <!-- 行为采集提示 -->
         <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div class="px-5 py-4 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-900">行为风控判断</h2>
+            <p class="text-xs text-gray-400 mt-0.5">基于上报的行为数据分析可信度（模拟后端风控逻辑）</p>
+          </div>
+          <div class="p-5 space-y-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="text-xs text-gray-500">行为可信度:</span>
+              <span class="inline-flex px-3 py-1 rounded text-sm font-bold"
+                :class="behaviorRisk.score >= 80 ? 'bg-green-100 text-green-700' : behaviorRisk.score >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'">
+                {{ behaviorRisk.score }}/100
+              </span>
+              <span class="text-xs text-gray-400">({{ behaviorRisk.total }} 个事件已分析)</span>
+            </div>
+
+            <!-- 子指标 -->
+            <div class="grid grid-cols-2 gap-2">
+              <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span class="text-xs text-gray-600">isTrusted 比例</span>
+                <span class="text-xs font-mono font-medium"
+                  :class="behaviorRisk.untrusted_ratio > 0 ? 'text-red-600' : 'text-green-600'">
+                  {{ behaviorRisk.trusted_count }}/{{ behaviorRisk.trusted_count + behaviorRisk.untrusted_events }}
+                  <span v-if="behaviorRisk.untrusted_events > 0" class="text-red-400 ml-1">({{ behaviorRisk.untrusted_events }} 伪造)</span>
+                </span>
+              </div>
+              <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span class="text-xs text-gray-600">鼠标轨迹自然度</span>
+                <span class="text-xs font-mono font-medium"
+                  :class="behaviorRisk.mouse_linear ? 'text-red-600' : 'text-green-600'">
+                  {{ behaviorRisk.mouse_linear ? '机械' : '自然' }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span class="text-xs text-gray-600">键盘间隔均匀度</span>
+                <span class="text-xs font-mono font-medium"
+                  :class="behaviorRisk.kbd_uniform ? 'text-red-600' : 'text-green-600'">
+                  {{ behaviorRisk.kbd_uniform ? '过于均匀' : '正常' }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span class="text-xs text-gray-600">零坐标点击</span>
+                <span class="text-xs font-mono font-medium"
+                  :class="behaviorRisk.zero_clicks > 0 ? 'text-red-600' : 'text-green-600'">
+                  {{ behaviorRisk.zero_clicks > 0 ? behaviorRisk.zero_clicks + ' 次' : '无' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 行为信号 -->
+            <div v-if="behaviorRisk.signals.length" class="flex flex-wrap gap-1.5">
+              <span v-for="s in behaviorRisk.signals" :key="s"
+                class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">{{ s }}</span>
+            </div>
+            <span v-else class="text-xs text-gray-400">操作量不足，等待更多数据...</span>
+          </div>
+        </section>
+
+        <!-- 行为采集提示 -->
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div class="px-5 py-4 border-b border-gray-100">
             <h2 class="text-sm font-semibold text-gray-900">行为采集测试</h2>
           </div>
           <div class="p-5">
@@ -331,6 +389,20 @@
           },
           counts: { mouse: 0, keyboard: 0, scroll: 0, touch: 0, report: 0 },
           behaviorPreview: '等待行为上报...',
+          behaviorRisk: {
+            score: 100,
+            total: 0,
+            trusted_count: 0,
+            untrusted_events: 0,
+            untrusted_ratio: 0,
+            mouse_linear: false,
+            kbd_uniform: false,
+            zero_clicks: 0,
+            signals: [],
+          },
+          // 累积的原始数据
+          _mouseTracks: [],
+          _keyIntervals: [],
           transportLogs: [],
           envError: '',
           riskLabels: [
@@ -393,6 +465,7 @@
             });
             this.sdkState = 'active';
             this.envError = '';
+            this.resetBehaviorRisk();
             this.log('SDK 初始化成功');
 
             BehaviorTrack.onBehaviorReport((data) => {
@@ -402,6 +475,7 @@
               this.counts.touch += data.data_stream.touch_events.length;
               this.counts.report++;
               this.behaviorPreview = JSON.stringify(data, null, 2);
+              this.analyzeBehavior(data.data_stream);
             });
 
             await this.refreshEnv();
@@ -427,7 +501,98 @@
         destroySDK() {
           BehaviorTrack.destroy();
           this.sdkState = 'destroyed';
+          this.resetBehaviorRisk();
           this.log('SDK 已销毁');
+        },
+
+        resetBehaviorRisk() {
+          this.behaviorRisk = { score: 100, total: 0, trusted_count: 0, untrusted_events: 0, untrusted_ratio: 0, mouse_linear: false, kbd_uniform: false, zero_clicks: 0, signals: [] };
+          this._mouseTracks = [];
+          this._keyIntervals = [];
+        },
+
+        analyzeBehavior(stream) {
+          const risk = this.behaviorRisk;
+
+          // 统计 isTrusted
+          const untrusted = [];
+          risk.trusted_count += stream.mouse_tracks.filter(t => t.is_trusted).length;
+          risk.trusted_count += stream.scroll_events.filter(t => t.is_trusted).length;
+          risk.trusted_count += stream.touch_events.filter(t => t.is_trusted).length;
+          untrusted.push(...stream.mouse_tracks.filter(t => !t.is_trusted));
+          untrusted.push(...stream.scroll_events.filter(t => !t.is_trusted));
+          untrusted.push(...stream.touch_events.filter(t => !t.is_trusted));
+          stream.keyboard_stream.forEach(k => risk.trusted_count += k.trusted_count);
+
+          const untrustedKbd = stream.keyboard_stream.reduce((s, k) => s + (k.key_count - k.trusted_count), 0);
+          if (untrusted.length + untrustedKbd > 0) {
+            risk.untrusted_events += untrusted.length + untrustedKbd;
+            risk.untrusted_ratio = risk.untrusted_events / (risk.trusted_count + risk.untrusted_events);
+          }
+
+          // 累积鼠标轨迹
+          const moves = stream.mouse_tracks.filter(t => t.type === 'move');
+          this._mouseTracks.push(...moves);
+          if (this._mouseTracks.length > 200) this._mouseTracks.splice(0, this._mouseTracks.length - 200);
+
+          // 累积键盘间隔
+          stream.keyboard_stream.forEach(k => {
+            if (k.interval_avg > 0) this._keyIntervals.push(k.interval_avg);
+          });
+          if (this._keyIntervals.length > 50) this._keyIntervals.splice(0, this._keyIntervals.length - 50);
+
+          // 检测零坐标点击
+          const zeroClicks = stream.mouse_tracks.filter(t =>
+            (t.type === 'click' || t.type === 'down') && t.x === 0 && t.y === 0
+          );
+          risk.zero_clicks += zeroClicks.length;
+
+          // --- 分析 ---
+          const signals = [];
+
+          // 1. isTrusted 检查
+          if (risk.untrusted_ratio > 0.3) signals.push('untrusted_events');
+
+          // 2. 鼠标直线运动检测 (角度变化标准差)
+          if (this._mouseTracks.length >= 5) {
+            let angles = [];
+            for (let i = 2; i < this._mouseTracks.length; i++) {
+              const a = this._mouseTracks[i - 2], b = this._mouseTracks[i - 1], c = this._mouseTracks[i];
+              const dx1 = b.x - a.x, dy1 = b.y - a.y, dx2 = c.x - b.x, dy2 = c.y - b.y;
+              const dot = dx1 * dx2 + dy1 * dy2;
+              const mag = Math.sqrt(dx1 * dx1 + dy1 * dy1) * Math.sqrt(dx2 * dx2 + dy2 * dy2);
+              if (mag > 0) angles.push(Math.acos(Math.max(-1, Math.min(1, dot / mag))));
+            }
+            if (angles.length >= 3) {
+              const avg = angles.reduce((s, v) => s + v, 0) / angles.length;
+              const std = Math.sqrt(angles.reduce((s, v) => s + (v - avg) ** 2, 0) / angles.length);
+              const isLinear = std < 0.2 && avg < 0.15;
+              risk.mouse_linear = isLinear;
+              if (isLinear) signals.push('mouse_linear');
+            }
+          }
+
+          // 3. 键盘间隔均匀度 (标准差/均值)
+          if (this._keyIntervals.length >= 4) {
+            const avg = this._keyIntervals.reduce((s, v) => s + v, 0) / this._keyIntervals.length;
+            const std = Math.sqrt(this._keyIntervals.reduce((s, v) => s + (v - avg) ** 2, 0) / this._keyIntervals.length);
+            const cv = avg > 0 ? std / avg : 0;
+            risk.kbd_uniform = cv < 0.2;
+            if (risk.kbd_uniform) signals.push('kbd_uniform');
+          }
+
+          // 4. 零坐标点击
+          if (risk.zero_clicks >= 3) signals.push('zero_coord_click');
+
+          // 综合评分
+          risk.signals = signals;
+          risk.total = risk.trusted_count + risk.untrusted_events;
+          let deduction = 0;
+          if (risk.untrusted_ratio > 0.3) deduction += 30;
+          if (risk.mouse_linear) deduction += 20;
+          if (risk.kbd_uniform) deduction += 20;
+          if (risk.zero_clicks >= 3) deduction += 20;
+          risk.score = Math.max(0, 100 - deduction);
         },
 
         async refreshEnv() {
