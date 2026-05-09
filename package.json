@@ -1,0 +1,37 @@
+{
+  "name": "behavior-track",
+  "version": "1.0.0",
+  "description": "Web前端环境安全识别SDK",
+  "main": "dist/behavior-track.cjs.js",
+  "module": "dist/behavior-track.esm.js",
+  "browser": "dist/behavior-track.umd.js",
+  "types": "dist/types/index.d.ts",
+  "files": [
+    "dist/"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "rollup -c rollup.config.ts --configPlugin typescript",
+    "dev": "rollup -c rollup.config.ts --configPlugin typescript -w",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "size": "ts-node scripts/size-check.ts"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^29.0.2",
+    "@rollup/plugin-node-resolve": "^15.3.1",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "happy-dom": "^15.11.0",
+    "playwright": "^1.59.1",
+    "rollup": "^4.28.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^5.2.0",
+    "js-sha256": "^0.11.1"
+  }
+}

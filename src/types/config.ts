@@ -1,0 +1,25 @@
+export interface SDKConfig {
+  appId: string;
+  endpoint?: string;
+  enableFingerprint?: boolean;
+  enableEnvironment?: boolean;
+  enableBehavior?: boolean;
+  behaviorSampleRate?: number;
+  batchInterval?: number;
+  batchSize?: number;
+  maxRetries?: number;
+  debug?: boolean;
+}
+
+export interface ResolvedConfig {
+  appId: string;
+  endpoint: string;
+  enableFingerprint: boolean;
+  enableEnvironment: boolean;
+  enableBehavior: boolean;
+  behaviorSampleRate: number;
+  batchInterval: number;
+  batchSize: number;
+  maxRetries: number;
+  debug: boolean;
+}

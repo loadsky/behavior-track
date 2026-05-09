@@ -1,0 +1,55 @@
+import { safeExec } from '../../utils/safe-exec';
+
+export interface ConsistencyResult {
+  ua_consistent: boolean;
+  signals: string[];
+}
+
+export function detectConsistency(): ConsistencyResult {
+  const signals: string[] = [];
+  const ua = navigator.userAgent;
+
+  safeExec(() => {
+    const platform = navigator.platform.toLowerCase();
+    if (ua.includes('Windows') && !platform.includes('win')) {
+      signals.push('ua_platform_mismatch');
+    }
+    if (ua.includes('Mac') && !platform.includes('mac')) {
+      signals.push('ua_platform_mismatch');
+    }
+    if (ua.includes('Linux') && !platform.includes('linux') && !platform.includes('android')) {
+      signals.push('ua_platform_mismatch');
+    }
+  }, undefined);
+
+  safeExec(() => {
+    if (ua.includes('Mobile') && navigator.maxTouchPoints === 0) {
+      signals.push('mobile_no_touch');
+    }
+  }, undefined);
+
+  safeExec(() => {
+    if (ua.includes('Android') && screen.width > 2000 && navigator.maxTouchPoints === 0) {
+      signals.push('android_desktop_screen');
+    }
+  }, undefined);
+
+  safeExec(() => {
+    const fnStr = navigator.userAgent.toString();
+    if (!fnStr.includes('[native code]') && fnStr.includes('function')) {
+      signals.push('ua_tampered');
+    }
+  }, undefined);
+
+  safeExec(() => {
+    const navProto = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');
+    if (navProto && navProto.get && !/\[native code\]/.test(navProto.get.toString())) {
+      signals.push('navigator_proxy');
+    }
+  }, undefined);
+
+  return {
+    ua_consistent: signals.length === 0,
+    signals,
+  };
+}
