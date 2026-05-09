@@ -30,7 +30,7 @@ jobs:
         run: |
           mkdir _site
           cp -r dist _site/dist
-          sed 's|../dist/|./dist/|g' examples/index.html > _site/index.html
+          sed 's|\.\./dist/|./dist/|g' examples/index.html > _site/index.html
 
       - uses: peaceiris/actions-gh-pages@v4
         with:
