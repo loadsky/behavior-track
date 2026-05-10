@@ -311,7 +311,10 @@ score = Σ weight[i] * 0.5^i
 #### 3.5.1 `MouseTracker`（`mouse.ts`）
 
 - 监听 `mousemove`（`throttle(50ms)`）/ `click` / `mousedown` / `mouseup`。
-- 每条：`{ x: clientX, y: clientY, t: Date.now(), type, is_trusted }`。
+- **分层存储**：`click`/`down`/`up` 进 `clicks[]`，`mousemove` 进 `moves[]`；双缓冲区各自做"时间窗（60s）+ 容量（clicks 500 / moves 2000）"双门控。
+- `click_tracks[]` 全量上报，每条含：`{ t, type, x, y, page_x, page_y, viewport_w, viewport_h, dpr, target_tag, target_path, is_trusted }`。`page_x/y` + 视口信息供服务端按分桶重建点击热区，`target_path` 为祖先 `tag:nth-child(n)` 路径（深度 ≤5）抗 DOM 重渲染漂移。
+- `move_features` 由 `drain()` 时遍历 moves 聚合生成（标量）：`count / avg_speed(px/s) / straight_ratio / pause_count / total_distance`。`straight_ratio` 用相邻两段方向余弦 > 0.98 判定，近似贝塞尔拟合残差的弱信号。
+- **触发式原始流**：`drain({ includeRaw: true })` 时把 moves 额外回传为 `RawOnRisk.mouse_moves`；由 SDK 层根据 `currentRiskScore ≥ rawStreamRiskThreshold` 决定是否命中，默认关闭。
 - `is_trusted` 是 W3C `Event.isTrusted`，**JS 构造的合成事件恒为 false**，辨别机器人的核心字段。
 
 #### 3.5.2 `KeyboardTracker`（`keyboard.ts`）
@@ -338,9 +341,9 @@ score = Σ weight[i] * 0.5^i
 
 #### 3.5.3 `ScrollTracker`（`scroll.ts`）
 
-- 监听 `window.scroll`，**100ms 去抖**。
-- 每条：`{ t, top: scrollY, speed: Δtop, direction: 'up'|'down', is_trusted }`。
-- `speed` 是与上一帧的绝对位移量（非严格速度单位）。
+- 监听 `window.scroll`，**100ms 去抖**，内部保留 `{ t, top, speed, direction, is_trusted }` 原始队列（时间窗 60s + 容量 500 双门控）。
+- `drain()` 时聚合为 `scroll_summary`：`max_depth / total_scroll / direction_changes / duration / read_time`。`read_time` 以相邻事件间隔 ≥300ms 累加，近似阅读停留。
+- 原始 `scroll_events` 仅在 `drain({ includeRaw: true })` 命中触发时通过 `RawOnRisk.scroll_events` 追加。
 
 #### 3.5.4 `TouchTracker`（`touch.ts`）
 
@@ -728,11 +731,12 @@ integrity_check = sha256(fastJsonStableStringify(payload))
 | 9 | `collectWebRTC` 只匹配 IPv4 | 扩展 IPv6；mDNS 混淆时显式记录信号 | 待解决 |
 | 10 | ~~`RetryQueue.pending/addToPending/drainPending` 定义未用~~ | 已删除 | ✅ |
 | 11 | ~~`trustedClicks` 变量定义未读~~ | 实际被 `analyzeSuspiciousBehavior` 使用（行 458），非死代码 | ✅ 误报 |
-| 12 | `devtools.ts` 尺寸差 160 阈值在高 DPI/小窗口误判 | 仅作弱信号已可接受；可上报 innerHeight/Width 供服务端复核 | 待解决 |
+| 12 | ~~`devtools.ts` 尺寸差 160 阈值在高 DPI/小窗口误判~~ | 已改为 `inner/outer < 0.88` 比值判定，并在 `outer < 50` 时跳过（防 iframe/minimized 误触） | ✅ |
 | 13 | ~~表单 `keydown` 监听未 `passive`，Enter 触发 `analyze()` 同步执行~~ | 全部监听改 `{ passive: true }`；Enter/action 走 `scheduleAnalyze()`，`requestIdleCallback` 异步合并执行 | ✅ |
-| 14 | ~~行为流 `mouse_tracks` 无上限~~ | `MouseTracker` 硬上限 `MAX_TRACKS = 2000`，超限环形丢弃最早记录 | ✅ |
+| 14 | ~~行为流 `mouse_tracks` 无上限~~ | `MouseTracker` 拆 `moves/clicks` 双缓冲，各自按"时间窗 60s + 容量"双门控，且 mousemove 默认聚合为 `move_features` 不再全量上报 | ✅ |
 | 15 | `examples/index.html` 依赖 CDN Tailwind + Vue | 网络受限环境无法本地跑；考虑预打包 vendor | 待解决 |
 | 16 | 默认 `endpoint = ''` 导致 beacon 发到空路径 | 空 endpoint 时 warn | 待解决 |
+| 17 | ~~mousemove/scroll 全量上报信噪比低~~ | 常态上报 `move_features` / `scroll_summary` 聚合标量；`uploadRawStreamOnRisk` 开启后 `risk_score ≥ rawStreamRiskThreshold` 触发窗口内 `raw_on_risk` 追带原始流 | ✅ |
 
 ### 7.3 安全视角
 

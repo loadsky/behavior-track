@@ -9,6 +9,9 @@ const DEFAULT_CONFIG: Omit<ResolvedConfig, 'appId'> = {
   batchInterval: 5000,
   batchSize: 50,
   maxRetries: 3,
+  uploadRawStreamOnRisk: false,
+  rawStreamRiskThreshold: 60,
+  rawStreamWindowBatches: 3,
   debug: false,
 };
 

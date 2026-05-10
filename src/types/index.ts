@@ -3,10 +3,15 @@ export type {
   RiskIndicators,
   PageContext,
   EnvStaticReport,
-  MouseTrack,
+  ClickTrack,
+  MoveFeatures,
+  ScrollSummary,
   KeyboardEvent,
-  ScrollEvent,
   TouchEvent,
+  RawMouseMove,
+  RawScrollEvent,
+  RawOnRisk,
+  BehaviorStream,
   BehaviorStreamReport,
 } from './reports';
 export type { FormDetectConfig, FormDetectionResult, FormSignalResults } from '../collectors/form-detector/types';

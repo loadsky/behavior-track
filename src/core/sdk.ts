@@ -26,6 +26,8 @@ export class BehaviorTrackSDK {
   private transport: TransportManager | null = null;
   private sequenceNo = 0;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private currentRiskScore = 0;
+  private rawWindowRemaining = 0;
 
   async init(config: SDKConfig): Promise<void> {
     if (this.lifecycle.state !== 'idle') return;
@@ -64,7 +66,17 @@ export class BehaviorTrackSDK {
 
   detect(config: FormDetectConfig): void {
     if (this.lifecycle.state === 'destroyed') return;
-    const detector = new FormDetector(config);
+    const originalOnResult = config.onResult;
+    const wrapped: FormDetectConfig = {
+      ...config,
+      onResult: (result) => {
+        if (typeof result.risk_score === 'number' && result.risk_score > this.currentRiskScore) {
+          this.currentRiskScore = result.risk_score;
+        }
+        originalOnResult?.(result);
+      },
+    };
+    const detector = new FormDetector(wrapped);
     this.formDetectors.push(detector);
   }
 
@@ -183,6 +195,10 @@ export class BehaviorTrackSDK {
     ri.signals = [...ri.signals, ...formSignalStrings];
     ri.risk_score = this.computeUpdatedRiskScore(ri.risk_score, formSuspicious, formSuperHuman, formCDPMouse);
 
+    if (ri.risk_score > this.currentRiskScore) {
+      this.currentRiskScore = ri.risk_score;
+    }
+
     const errCounts = snapshotErrorCounts();
     if (Object.keys(errCounts).length > 0) {
       report.error_counts = errCounts;
@@ -211,15 +227,27 @@ export class BehaviorTrackSDK {
   private setupBatchFlush(): void {
     const flushBehavior = async () => {
       if (!this.lifecycle.isActive() || !this.behaviorManager) return;
-      const stream = this.behaviorManager.drain();
-      if (!stream || (
-        stream.mouse_tracks.length === 0 &&
-        stream.keyboard_stream.length === 0 &&
-        stream.scroll_events.length === 0 &&
-        stream.touch_events.length === 0
-      )) {
+
+      const hit = this.config.uploadRawStreamOnRisk
+        && this.currentRiskScore >= this.config.rawStreamRiskThreshold;
+      if (hit) this.rawWindowRemaining = this.config.rawStreamWindowBatches;
+      const includeRaw = this.rawWindowRemaining > 0;
+      if (includeRaw) this.rawWindowRemaining--;
+
+      const stream = this.behaviorManager.drain({ includeRaw });
+      const isEmpty = stream.click_tracks.length === 0
+        && stream.keyboard_stream.length === 0
+        && stream.touch_events.length === 0
+        && stream.move_features.count === 0
+        && stream.scroll_summary.total_scroll === 0
+        && !stream.raw_on_risk;
+      if (isEmpty) {
         scheduleNext();
         return;
+      }
+
+      if (stream.raw_on_risk) {
+        stream.raw_on_risk.trigger_score = this.currentRiskScore;
       }
 
       this.sequenceNo++;

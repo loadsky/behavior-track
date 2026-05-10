@@ -1,16 +1,9 @@
 import type { ResolvedConfig } from '../../types/config';
-import type { MouseTrack, KeyboardEvent, ScrollEvent, TouchEvent } from '../../types/reports';
+import type { BehaviorStream } from '../../types/reports';
 import { MouseTracker } from './mouse';
 import { KeyboardTracker } from './keyboard';
 import { ScrollTracker } from './scroll';
 import { TouchTracker } from './touch';
-
-export interface BehaviorStream {
-  mouse_tracks: MouseTrack[];
-  keyboard_stream: KeyboardEvent[];
-  scroll_events: ScrollEvent[];
-  touch_events: TouchEvent[];
-}
 
 export class BehaviorManager {
   private mouse: MouseTracker;
@@ -44,13 +37,23 @@ export class BehaviorManager {
     this.touch.stop();
   }
 
-  drain(): BehaviorStream {
+  drain(options: { includeRaw: boolean } = { includeRaw: false }): BehaviorStream {
+    const mouse = this.mouse.drain(options.includeRaw);
+    const scroll = this.scroll.drain(options.includeRaw);
     const stream: BehaviorStream = {
-      mouse_tracks: this.mouse.drain(),
+      click_tracks: mouse.clicks,
+      move_features: mouse.features,
+      scroll_summary: scroll.summary,
       keyboard_stream: this.keyboard.drain(),
-      scroll_events: this.scroll.drain(),
       touch_events: this.touch.drain(),
     };
+    if (options.includeRaw) {
+      stream.raw_on_risk = {
+        mouse_moves: mouse.rawMoves ?? [],
+        scroll_events: scroll.rawEvents ?? [],
+        trigger_score: 0,
+      };
+    }
     this._sampled = null;
     return stream;
   }

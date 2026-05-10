@@ -8,6 +8,9 @@ export interface SDKConfig {
   batchInterval?: number;
   batchSize?: number;
   maxRetries?: number;
+  uploadRawStreamOnRisk?: boolean;
+  rawStreamRiskThreshold?: number;
+  rawStreamWindowBatches?: number;
   debug?: boolean;
 }
 
@@ -21,5 +24,8 @@ export interface ResolvedConfig {
   batchInterval: number;
   batchSize: number;
   maxRetries: number;
+  uploadRawStreamOnRisk: boolean;
+  rawStreamRiskThreshold: number;
+  rawStreamWindowBatches: number;
   debug: boolean;
 }
