@@ -11,7 +11,7 @@ export function detectAutomation(): AutomationResult {
   const signals: string[] = [];
 
   safeExec(() => {
-    if (navigator.webdriver) signals.push('navigator.webdriver');
+    if (navigator.webdriver) signals.push('webdriver');
   }, undefined, SCOPE);
 
   safeExec(() => {

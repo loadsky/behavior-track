@@ -88,12 +88,9 @@ export class FormDetector {
     }
     const s = this.lastResult.signals;
     const strs: string[] = [];
-    if (s.suspicious_client_side_behavior) strs.push('form_suspicious_behavior');
-    if (s.super_human_speed) strs.push('form_super_human_speed');
-    if (s.has_cdp_mouse_leak) strs.push('form_cdp_mouse_leak');
-    for (const issue of this.lastResult.issues) {
-      strs.push(`form:${issue}`);
-    }
+    if (s.suspicious_client_side_behavior) strs.push('form:suspicious_behavior');
+    if (s.super_human_speed) strs.push('form:super_human_speed');
+    if (s.has_cdp_mouse_leak) strs.push('form:cdp_mouse_leak');
     return {
       is_suspicious_form: s.suspicious_client_side_behavior,
       is_form_super_human: s.super_human_speed,
