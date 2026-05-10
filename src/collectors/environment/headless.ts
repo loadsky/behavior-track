@@ -1,4 +1,5 @@
 import { safeExec } from '../../utils/safe-exec';
+import { UAParser } from 'ua-parser-js';
 
 const SCOPE = 'headless';
 
@@ -9,9 +10,12 @@ export interface HeadlessResult {
 
 export function detectHeadless(): HeadlessResult {
   const signals: string[] = [];
+  const ua = navigator.userAgent;
+  const device = new UAParser(ua).getDevice();
+  const isMobile = device.type === 'mobile' || device.type === 'tablet';
 
   safeExec(() => {
-    if (navigator.plugins && navigator.plugins.length === 0) {
+    if (!isMobile && navigator.plugins && navigator.plugins.length === 0) {
       signals.push('no_plugins');
     }
   }, undefined, SCOPE);
@@ -29,7 +33,7 @@ export function detectHeadless(): HeadlessResult {
   }, undefined, SCOPE);
 
   safeExec(() => {
-    if (!(window as unknown as Record<string, unknown>).chrome && /Chrome/.test(navigator.userAgent)) {
+    if (!isMobile && !(window as unknown as Record<string, unknown>).chrome && /Chrome/.test(ua)) {
       signals.push('chrome_obj_missing');
     }
   }, undefined, SCOPE);

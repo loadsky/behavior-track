@@ -1,3 +1,5 @@
+import { UAParser } from 'ua-parser-js';
+
 export interface BrowserInfo {
   browser: string;
   browser_version: string;
@@ -15,8 +17,16 @@ export interface PageContext {
   cookie_enabled: boolean;
 }
 
+const uaDeviceTypeMap: Record<string, 'PC' | 'Mobile' | 'Tablet'> = {
+  mobile: 'Mobile',
+  tablet: 'Tablet',
+  wearable: 'Mobile',
+  embedded: 'Mobile',
+};
+
 export async function parseBrowser(): Promise<BrowserInfo> {
   const ua = navigator.userAgent;
+  const uaParsedData = parseFromUA(ua);
 
   // 尝试 User-Agent Client Hints API (Chrome 90+, Edge 90+)
   const uaData = (navigator as unknown as Record<string, unknown>).userAgentData as
@@ -35,9 +45,9 @@ export async function parseBrowser(): Promise<BrowserInfo> {
 
       return {
         browser: browser.id,
-        browser_version: preciseVersion,
-        os: uaData.platform || parseOS(ua),
-        device_type: uaData.mobile ? 'Mobile' : parseDeviceType(ua),
+        browser_version: preciseVersion || uaParsedData.browser_version || '',
+        os: uaData.platform || uaParsedData.os,
+        device_type: uaData.mobile ? 'Mobile' : uaParsedData.device_type,
       };
     } catch {
       // 回退到 UA 解析
@@ -45,6 +55,20 @@ export async function parseBrowser(): Promise<BrowserInfo> {
   }
 
   return parseFromUA(ua);
+}
+
+function parseFromUA(ua: string): BrowserInfo {
+  const parser = new UAParser(ua);
+  const browser = parser.getBrowser();
+  const os = parser.getOS();
+  const device = parser.getDevice();
+
+  return {
+    browser: (browser.name || 'unknown').toLowerCase(),
+    browser_version: browser.version || '',
+    os: os.name || '',
+    device_type: uaDeviceTypeMap[device.type || ''] || 'PC',
+  };
 }
 
 function parseBrandName(
@@ -56,55 +80,8 @@ function parseBrandName(
     if (brand === 'Microsoft Edge') return { id: 'edge', label: 'Microsoft Edge', alias: 'Chromium' };
     if (brand === 'Opera') return { id: 'opera', label: 'Opera', alias: 'Chromium' };
   }
-  const fromUA = parseBrowserId(ua);
+  const fromUA = parseFromUA(ua).browser;
   return { id: fromUA, label: '', alias: '' };
-}
-
-function parseFromUA(ua: string): BrowserInfo {
-  return {
-    browser: parseBrowserId(ua),
-    browser_version: parseVersion(ua),
-    os: parseOS(ua),
-    device_type: parseDeviceType(ua),
-  };
-}
-
-function parseBrowserId(ua: string): string {
-  if (/Edg\//.test(ua)) return 'edge';
-  if (/OPR\//.test(ua)) return 'opera';
-  if (/Chrome\//.test(ua)) return 'chrome';
-  if (/Firefox\//.test(ua)) return 'firefox';
-  if (/Safari\//.test(ua) && !/Chrome/.test(ua)) return 'safari';
-  return 'unknown';
-}
-
-function parseVersion(ua: string): string {
-  const map: Array<{ test: RegExp; pattern: RegExp }> = [
-    { test: /Edg\//, pattern: /Edg\/([\d.]+)/ },
-    { test: /OPR\//, pattern: /OPR\/([\d.]+)/ },
-    { test: /Chrome\//, pattern: /Chrome\/([\d.]+)/ },
-    { test: /Firefox\//, pattern: /Firefox\/([\d.]+)/ },
-    { test: /Safari\//, pattern: /Version\/([\d.]+)/ },
-  ];
-  for (const { test, pattern } of map) {
-    if (test.test(ua)) return (ua.match(pattern) || [])[1] || '';
-  }
-  return '';
-}
-
-function parseOS(ua: string): string {
-  if (/Windows/.test(ua)) return 'Windows';
-  if (/Mac/.test(ua)) return 'Mac';
-  if (/Android/.test(ua)) return 'Android';
-  if (/iPhone|iPad|iPod/.test(ua)) return 'iOS';
-  if (/Linux/.test(ua)) return 'Linux';
-  return '';
-}
-
-function parseDeviceType(ua: string): 'PC' | 'Mobile' | 'Tablet' {
-  if (/Mobi/.test(ua)) return 'Mobile';
-  if (/Tablet|iPad/.test(ua)) return 'Tablet';
-  return 'PC';
 }
 
 export function getPageContext(): PageContext {
