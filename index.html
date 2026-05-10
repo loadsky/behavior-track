@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BehaviorTrack SDK 功能测试</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['SF Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          },
+        },
+      },
+    }
+  </script>
+</head>
+<body class="bg-gray-100 text-gray-800 min-h-screen overflow-x-hidden">
+  <div id="app">
+    <!-- Header -->
+    <header class="bg-gray-900 text-white px-6 py-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-xl font-semibold tracking-tight">BehaviorTrack SDK 功能测试</h1>
+          <p class="text-sm mt-1 opacity-60">SDK 状态:
+            <span :class="statusColor" class="font-medium">{{ statusText }}</span>
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center gap-1.5 text-xs">
+            <span class="w-2 h-2 rounded-full" :class="statusDot"></span>
+            {{ sdkState === 'idle' ? '等待初始化' : sdkState.toUpperCase() }}
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="flex flex-col lg:flex-row gap-0 max-w-[1600px] mx-auto">
+
+      <!-- Sidebar -->
+      <aside class="lg:w-96 w-full bg-white border-r border-gray-200 flex-shrink-0">
+        <div class="p-5 space-y-5">
+
+          <!-- SDK 控制 -->
+          <section>
+            <h2 class="text-sm font-semibold text-gray-900 mb-3">SDK 控制</h2>
+            <div class="flex flex-wrap gap-2">
+              <button @click="initSDK"
+                :disabled="sdkState === 'active'"
+                class="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-medium rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                初始化
+              </button>
+              <button @click="pauseSDK"
+                :disabled="sdkState !== 'active'"
+                class="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-40 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                暂停
+              </button>
+              <button @click="resumeSDK"
+                :disabled="sdkState !== 'paused'"
+                class="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-40 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                恢复
+              </button>
+              <button @click="destroySDK"
+                :disabled="sdkState === 'idle' || sdkState === 'destroyed'"
+                class="inline-flex items-center gap-1.5 px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white text-sm font-medium rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                销毁
+              </button>
+            </div>
+          </section>
+
+          <!-- 初始化配置 -->
+          <section class="bg-gray-50 rounded-xl border border-gray-200 p-4">
+            <h3 class="text-sm font-semibold text-gray-900 mb-3">初始化配置</h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">appId</label>
+                <input v-model="config.appId" type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors">
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input v-model="config.enableFingerprint" type="checkbox" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                  采集指纹
+                </label>
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input v-model="config.enableEnvironment" type="checkbox" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                  环境检测
+                </label>
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input v-model="config.enableBehavior" type="checkbox" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                  行为追踪
+                </label>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">上报间隔 (ms)</label>
+                  <input v-model.number="config.batchInterval" type="number" min="500" step="500"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors">
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">批量大小</label>
+                  <input v-model.number="config.batchSize" type="number" min="1" max="100"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors">
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 控制台输出 -->
+          <section class="bg-gray-50 rounded-xl border border-gray-200 p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-semibold text-gray-900">控制台输出 (传输层)</h3>
+              <button @click="transportLogs = []" class="text-xs text-gray-500 hover:text-gray-700 transition-colors">清空</button>
+            </div>
+            <div class="bg-gray-900 text-green-400 font-mono text-[11px] p-3 rounded-lg max-h-72 overflow-auto leading-relaxed whitespace-pre-wrap break-all">
+              <template v-if="transportLogs.length > 0">
+                <div v-for="(log, i) in transportLogs" :key="i">{{ log }}</div>
+              </template>
+              <span v-else class="text-gray-500">等待初始化...</span>
+            </div>
+          </section>
+
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="flex-1 p-5 space-y-5 min-w-0">
+
+        <!-- 环境指纹信息 -->
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-900">环境指纹信息 (getEnvInfo)</h2>
+            <button @click="refreshEnv"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              刷新
+            </button>
+          </div>
+          <div class="p-5 space-y-4">
+            <!-- 错误提示 -->
+            <div v-if="envError" class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">{{ envError }}</div>
+
+            <!-- 设备标识 -->
+            <div>
+              <h4 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">设备标识</h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <div class="flex gap-2">
+                  <span class="text-gray-500 shrink-0">device_id:</span>
+                  <span class="font-mono text-xs break-all">{{ env.device_id || '-' }}</span>
+                </div>
+                <div class="flex gap-2">
+                  <span class="text-gray-500 shrink-0">fingerprint:</span>
+                  <span class="font-mono text-xs break-all">{{ env.fingerprint || '-' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 页面上下文 -->
+            <div>
+              <h4 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">页面上下文</h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <div v-for="(v, k) in env.page_context" :key="k" class="flex gap-2">
+                  <span class="text-gray-500 shrink-0">{{ k }}:</span>
+                  <span class="font-mono text-xs break-all">{{ v }}</span>
+                </div>
+                <div v-if="!Object.keys(env.page_context).length" class="text-gray-400 text-sm">-</div>
+              </div>
+            </div>
+
+            <!-- 浏览器信息 -->
+            <div>
+              <h4 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">浏览器信息</h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <div class="flex gap-2"><span class="text-gray-500 shrink-0">browser:</span><span class="font-mono text-xs">{{ env.browser || '-' }}</span></div>
+                <div class="flex gap-2"><span class="text-gray-500 shrink-0">browser_version:</span><span class="font-mono text-xs">{{ env.browser_version || '-' }}</span></div>
+                <div class="flex gap-2"><span class="text-gray-500 shrink-0">os:</span><span class="font-mono text-xs">{{ env.os || '-' }}</span></div>
+                <div class="flex gap-2"><span class="text-gray-500 shrink-0">device_type:</span><span class="font-mono text-xs">{{ env.device_type || '-' }}</span></div>
+                <div class="flex gap-2 sm:col-span-2"><span class="text-gray-500 shrink-0">user_agent:</span><span class="font-mono text-xs break-all">{{ env.user_agent || '-' }}</span></div>
+              </div>
+            </div>
+
+            <!-- WebRTC IPs -->
+            <div>
+              <h4 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">WebRTC 内网IP</h4>
+              <span class="font-mono text-xs" :class="env.webrtc_ips.length ? 'text-gray-800' : 'text-gray-400'">
+                {{ env.webrtc_ips.length ? env.webrtc_ips.join(', ') : '(无)' }}
+              </span>
+            </div>
+
+            <!-- 风险指标 -->
+            <div>
+              <h4 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">风险指标</h4>
+              <div v-if="env.risk_indicators" class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-xs text-gray-500">risk_score:</span>
+                  <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium"
+                    :class="env.risk_indicators.risk_score >= 40 ? 'bg-red-100 text-red-700' : env.risk_indicators.risk_score >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'">
+                    {{ env.risk_indicators.risk_score }}/100
+                  </span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <span v-for="label in riskLabels" :key="label.key"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                    :class="env.risk_indicators[label.key] ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
+                    {{ label.text }}: {{ env.risk_indicators[label.key] ? '是' : '否' }}
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                    :class="env.risk_indicators.ua_consistent ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
+                    UA一致: {{ env.risk_indicators.ua_consistent ? '是' : '否' }}
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                    :class="env.risk_indicators.worker_consistent ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
+                    Worker一致: {{ env.risk_indicators.worker_consistent ? '是' : '否' }}
+                  </span>
+                </div>
+                <div v-if="env.risk_indicators.signals.length" class="flex flex-wrap gap-1.5">
+                  <span v-for="s in env.risk_indicators.signals" :key="s"
+                    class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">{{ s }}</span>
+                </div>
+                <span v-else class="text-xs text-gray-400">无异常信号</span>
+              </div>
+              <span v-else class="text-xs text-gray-400">-</span>
+            </div>
+
+            <!-- Integrity -->
+            <div class="text-xs text-gray-500 pt-1 border-t border-gray-100">
+              integrity: <span class="font-mono text-[11px] break-all">{{ env.integrity_check || '-' }}</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 行为数据统计 -->
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <h2 class="text-sm font-semibold text-gray-900 mb-4">行为数据统计</h2>
+          <div class="flex flex-wrap gap-8">
+            <div class="text-center min-w-[60px]">
+              <div class="text-2xl font-bold text-indigo-600">{{ counts.mouse }}</div>
+              <div class="text-xs text-gray-400 mt-0.5">鼠标事件</div>
+            </div>
+            <div class="text-center min-w-[60px]">
+              <div class="text-2xl font-bold text-indigo-600">{{ counts.keyboard }}</div>
+              <div class="text-xs text-gray-400 mt-0.5">键盘批次</div>
+            </div>
+            <div class="text-center min-w-[60px]">
+              <div class="text-2xl font-bold text-indigo-600">{{ counts.scroll }}</div>
+              <div class="text-xs text-gray-400 mt-0.5">滚动事件</div>
+            </div>
+            <div class="text-center min-w-[60px]">
+              <div class="text-2xl font-bold text-indigo-600">{{ counts.touch }}</div>
+              <div class="text-xs text-gray-400 mt-0.5">触摸事件</div>
+            </div>
+            <div class="text-center min-w-[60px]">
+              <div class="text-2xl font-bold text-indigo-600">{{ counts.report }}</div>
+              <div class="text-xs text-gray-400 mt-0.5">已上报批次</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 模拟登录表单 -->
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-900 flex items-center gap-2">
+              模拟登录表单
+              <span class="text-xs font-normal text-gray-400">(风控交互测试)</span>
+            </h2>
+          </div>
+          <div class="p-5">
+            <form id="login-form" class="max-w-sm space-y-4" @submit.prevent>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">邮箱</label>
+                <input id="login-email" type="email" autocomplete="off"
+                  class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">密码</label>
+                <input id="login-password" type="password" autocomplete="off"
+                  class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-colors">
+              </div>
+              <button id="login-btn" type="submit"
+                class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                @click="handleLogin">
+                登录
+              </button>
+              <p v-if="loginHint" class="mt-2 text-xs text-amber-600">{{ loginHint }}</p>
+            </form>
+
+            <!-- SDK 表单检测结果 -->
+            <div v-if="formResult" class="mt-5 pt-4 border-t border-gray-100 space-y-2">
+              <p class="text-xs font-medium text-gray-600">SDK 表单检测结果 (detect)</p>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
+                  <span class="text-gray-500">判定</span>
+                  <span class="font-mono" :class="formResult.is_pass ? 'text-green-600' : 'text-red-600'">{{ formResult.is_pass ? '通过' : '可疑' }}</span>
+                </div>
+                <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
+                  <span class="text-gray-500">风险评分</span>
+                  <span class="font-mono">{{ formResult.risk_score }}/100</span>
+                </div>
+                <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
+                  <span class="text-gray-500">可疑行为</span>
+                  <span class="font-mono" :class="formResult.signals.suspicious_client_side_behavior ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.suspicious_client_side_behavior ? '检测到' : '无' }}</span>
+                </div>
+                <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
+                  <span class="text-gray-500">超人类速度</span>
+                  <span class="font-mono" :class="formResult.signals.super_human_speed ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.super_human_speed ? '检测到' : '无' }}</span>
+                </div>
+                <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
+                  <span class="text-gray-500">CDP 鼠标泄露</span>
+                  <span class="font-mono" :class="formResult.signals.has_cdp_mouse_leak ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.has_cdp_mouse_leak ? '检测到' : '无' }}</span>
+                </div>
+                <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
+                  <span class="text-gray-500">时间戳</span>
+                  <span class="font-mono">{{ new Date(formResult.timestamp).toLocaleTimeString() }}</span>
+                </div>
+              </div>
+
+              <!-- 问题列表 -->
+              <div v-if="formResult.issues.length" class="mt-2">
+                <p class="text-xs text-gray-500 mb-1">检测到的问题:</p>
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="issue in formResult.issues" :key="issue"
+                    class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">{{ issue }}</span>
+                </div>
+              </div>
+
+              <!-- 表单风控结论 -->
+              <div class="mt-3 rounded-lg px-4 py-3"
+                :class="!formResult.is_pass ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'">
+                <p class="text-xs font-medium">{{ !formResult.is_pass ? '风控拦截' : '通过' }}: {{ formResult.is_pass ? '未发现自动化工具特征' : '检测到自动化工具特征' }}</p>
+              </div>
+            </div>
+            <p v-else class="text-xs text-gray-400 mt-4">填写表单并点击登录，查看 SDK 内置检测结果</p>
+          </div>
+        </section>
+
+        <!-- 行为风控判断 -->
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-900">行为风控判断</h2>
+            <p class="text-xs text-gray-400 mt-0.5">基于上报的行为数据分析可信度（模拟后端风控逻辑）</p>
+          </div>
+          <div class="p-5 space-y-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="text-xs text-gray-500">行为可信度:</span>
+              <span class="inline-flex px-3 py-1 rounded text-sm font-bold"
+                :class="behaviorRisk.score >= 80 ? 'bg-green-100 text-green-700' : behaviorRisk.score >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'">
+                {{ behaviorRisk.score }}/100
+              </span>
+              <span class="text-xs text-gray-400">({{ behaviorRisk.total }} 个事件已分析)</span>
+            </div>
+
+            <!-- 子指标 -->
+            <div class="grid grid-cols-2 gap-2">
+              <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span class="text-xs text-gray-600">isTrusted 比例</span>
+                <span class="text-xs font-mono font-medium"
+                  :class="behaviorRisk.untrusted_ratio > 0 ? 'text-red-600' : 'text-green-600'">
+                  {{ behaviorRisk.trusted_count }}/{{ behaviorRisk.trusted_count + behaviorRisk.untrusted_events }}
+                  <span v-if="behaviorRisk.untrusted_events > 0" class="text-red-400 ml-1">({{ behaviorRisk.untrusted_events }} 伪造)</span>
+                </span>
+              </div>
+              <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span class="text-xs text-gray-600">鼠标轨迹自然度</span>
+                <span class="text-xs font-mono font-medium"
+                  :class="behaviorRisk.mouse_linear ? 'text-red-600' : 'text-green-600'">
+                  {{ behaviorRisk.mouse_linear ? '机械' : '自然' }}
+                  <span v-if="behaviorRisk.mouse_straight_ratio > 0" class="text-gray-400 ml-1">(直线 {{ Math.round(behaviorRisk.mouse_straight_ratio * 100) }}%)</span>
+                </span>
+              </div>
+              <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span class="text-xs text-gray-600">键盘间隔均匀度</span>
+                <span class="text-xs font-mono font-medium"
+                  :class="behaviorRisk.kbd_uniform ? 'text-red-600' : 'text-green-600'">
+                  {{ behaviorRisk.kbd_uniform ? '过于均匀' : '正常' }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span class="text-xs text-gray-600">零坐标点击</span>
+                <span class="text-xs font-mono font-medium"
+                  :class="behaviorRisk.zero_clicks > 0 ? 'text-red-600' : 'text-green-600'">
+                  {{ behaviorRisk.zero_clicks > 0 ? behaviorRisk.zero_clicks + ' 次' : '无' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 行为信号 -->
+            <div v-if="behaviorRisk.signals.length" class="flex flex-wrap gap-1.5">
+              <span v-for="s in behaviorRisk.signals" :key="s"
+                class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">{{ s }}</span>
+            </div>
+            <span v-else class="text-xs text-gray-400">操作量不足，等待更多数据...</span>
+          </div>
+        </section>
+
+        <!-- 行为采集提示 -->
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-900">行为采集测试</h2>
+          </div>
+          <div class="p-5">
+            <div class="rounded-xl bg-indigo-50 border border-indigo-200 p-6 text-sm text-indigo-700 space-y-3">
+              <p class="font-medium">行为追踪模块已在页面全局监听以下事件：</p>
+              <ul class="space-y-2 list-disc list-inside text-indigo-600">
+                <li><strong>鼠标追踪</strong> — 在页面任意位置移动鼠标、点击，采集轨迹与速度</li>
+                <li><strong>键盘时序</strong> — 在页面任意位置输入文字，采集按键间隔（不记录键值）</li>
+                <li><strong>滚动行为</strong> — 滚动页面任意区域，采集方向与速度</li>
+                <li><strong>触摸事件</strong> — 在触屏设备上操作，采集压力与多点信息</li>
+              </ul>
+              <p class="text-indigo-400 text-xs">请在上方 <strong>SDK 控制</strong> 中初始化并开启行为追踪，然后在页面进行相应操作，观察统计数据变化。</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 最新上报数据预览 -->
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-900">最新上报数据预览</h2>
+          </div>
+          <div class="p-5">
+            <pre class="bg-gray-900 text-green-400 font-mono text-[11px] p-4 rounded-lg max-h-96 overflow-auto leading-relaxed whitespace-pre-wrap break-all">{{ behaviorPreview }}</pre>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <script type="module">
+    import { BehaviorTrack } from './dist/behavior-track.esm.js';
+    window.__bt = BehaviorTrack;
+
+    const originalLog = console.log.bind(console);
+
+    const app = Vue.createApp({
+      data() {
+        return {
+          sdkState: 'idle', // idle | active | paused | destroyed
+          config: {
+            appId: 'demo-test-app',
+            enableFingerprint: true,
+            enableEnvironment: true,
+            enableBehavior: false,
+            batchInterval: 3000,
+            batchSize: 20,
+            debug: true,
+          },
+          env: {
+            device_id: '',
+            fingerprint: '',
+            page_context: {},
+            browser: '',
+            browser_version: '',
+            os: '',
+            device_type: '',
+            user_agent: '',
+            webrtc_ips: [],
+            risk_indicators: null,
+            integrity_check: '',
+          },
+          counts: { mouse: 0, keyboard: 0, scroll: 0, touch: 0, report: 0 },
+          behaviorPreview: '等待行为上报...',
+          behaviorRisk: {
+            score: 100,
+            total: 0,
+            trusted_count: 0,
+            untrusted_events: 0,
+            untrusted_ratio: 0,
+            mouse_linear: false,
+            mouse_straight_ratio: 0,
+            kbd_uniform: false,
+            zero_clicks: 0,
+            signals: [],
+          },
+          // 累积的原始数据
+          _moveFeatures: [],
+          _keyIntervals: [],
+
+          // SDK 表单检测结果
+          formResult: null,
+          loginHint: '',
+          transportLogs: [],
+          envError: '',
+          riskLabels: [
+            { key: 'is_webdriver', text: 'WebDriver' },
+            { key: 'is_headless', text: 'Headless' },
+            { key: 'is_devtools_open', text: 'DevTools' },
+            { key: 'is_cdp', text: 'CDP' },
+            { key: 'is_selenium', text: 'Selenium' },
+            { key: 'is_nightmare', text: 'Nightmare' },
+            { key: 'is_sequentum', text: 'Sequentum' },
+            { key: 'iframe_overridden', text: 'iframe覆写' },
+            { key: 'iframe_webdriver', text: 'iframe WebDriver' },
+            { key: 'worker_cdp', text: 'Worker CDP' },
+            { key: 'is_tampered', text: '已篡改' },
+            { key: 'is_proxy', text: '代理' },
+          ],
+        };
+      },
+
+      computed: {
+        statusText() {
+          const map = { idle: '未初始化', active: 'ACTIVE', paused: 'PAUSED', destroyed: 'DESTROYED' };
+          return map[this.sdkState] || '未知';
+        },
+        statusColor() {
+          const map = { idle: 'text-yellow-400', active: 'text-green-400', paused: 'text-yellow-400', destroyed: 'text-red-400' };
+          return map[this.sdkState] || 'text-gray-400';
+        },
+        statusDot() {
+          const map = { idle: 'bg-yellow-400', active: 'bg-green-400', paused: 'bg-yellow-400', destroyed: 'bg-red-400' };
+          return map[this.sdkState] || 'bg-gray-400';
+        },
+      },
+
+      methods: {
+        log(...args) {
+          const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 1)).join(' ');
+          const entry = `[${new Date().toLocaleTimeString()}] ${msg}`;
+          this.transportLogs.push(entry);
+          if (this.transportLogs.length > 50) this.transportLogs.shift();
+        },
+
+        interceptConsoleLog() {
+          console.log = (...args) => {
+            originalLog(...args);
+            const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 1)).join(' ');
+            if (msg.includes('[BehaviorTrack]')) {
+              const entry = `[${new Date().toLocaleTimeString()}] ${msg}`;
+              this.transportLogs.push(entry);
+              if (this.transportLogs.length > 50) this.transportLogs.shift();
+            }
+          };
+        },
+
+        async initSDK() {
+          try {
+            await BehaviorTrack.init({
+              ...this.config,
+              debug: true,
+            });
+            this.sdkState = 'active';
+            this.envError = '';
+            this.loginHint = '';
+            this.resetBehaviorRisk();
+            this.log('SDK 初始化成功');
+
+            BehaviorTrack.onBehaviorReport((data) => {
+              const s = data.data_stream;
+              this.counts.mouse += s.click_tracks.length + s.move_features.count;
+              this.counts.keyboard += s.keyboard_stream.length;
+              this.counts.scroll += s.scroll_summary.direction_changes;
+              this.counts.touch += s.touch_events.length;
+              this.counts.report++;
+              this.behaviorPreview = JSON.stringify(data, null, 2);
+              this.analyzeBehavior(s);
+            });
+
+            // 原因标识 → 人类可读文本映射
+            this._issueLabels = {
+              // suspiciousClientSideBehavior
+              no_keyboard_but_value: '无键盘事件但字段有值',
+              center_corner_click: '点击在正中/四角比例过高',
+              same_click_offset: '不同字段点击偏移一致',
+              no_mouse_before_click: '点击前无鼠标移动',
+              no_tab_no_click_switch: '多字段填充但无Tab或鼠标切换',
+              parallel_fill: '字段填充间隔过短',
+              untrusted_events: '存在非受信事件',
+              // superHumanSpeed
+              batch_assign: '批量赋值',
+              typing_too_fast: '打字速度超人类',
+              uniform_intervals: '按键间隔过于均匀',
+              orphan_keydown: '孤立keydown事件',
+              // hasCDPMouseLeak
+              zero_coord_click: '零坐标点击',
+              integer_coords: '整数坐标比例过高',
+              coord_inconsistent: '坐标系统不一致',
+              offset_anomaly: 'offset坐标异常',
+              // environment
+              env_cdp_detected: '环境检测到CDP协议',
+              env_devtools_open: '环境检测到DevTools已打开',
+              env_webdriver: '环境检测到WebDriver特征',
+              env_headless: '环境检测到Headless模式',
+              env_worker_cdp: '环境检测到Worker CDP',
+              env_tampered: '环境检测到篡改痕迹',
+              env_ua_inconsistent: '环境检测到UA不一致',
+            };
+
+            // 使用 SDK 内置表单检测
+            BehaviorTrack.detect({
+              containerSelector: '#login-form',
+              actionSelector: '#login-btn',
+              onResult: (result) => {
+                // 将原因标识映射为可读文本
+                const labels = result.issues.map(c => this._issueLabels[c] || c);
+                this.formResult = { ...result, issues: labels };
+                this.log(`表单检测数据: ${JSON.stringify(result, null, 2)}`);
+                this.log(`SDK 表单检测: ${result.is_pass ? '通过' : '可疑'} — 评分 ${result.risk_score}/100${labels.length ? ' — ' + labels.join('; ') : ''}`);
+              },
+            });
+
+            await this.refreshEnv();
+          } catch (e) {
+            this.sdkState = 'idle';
+            this.envError = '初始化失败: ' + e.message;
+            this.log('初始化失败: ' + e.message);
+          }
+        },
+
+        pauseSDK() {
+          BehaviorTrack.pause();
+          this.sdkState = 'paused';
+          this.log('SDK 已暂停');
+        },
+
+        resumeSDK() {
+          BehaviorTrack.resume();
+          this.sdkState = 'active';
+          this.log('SDK 已恢复');
+        },
+
+        destroySDK() {
+          BehaviorTrack.destroy();
+          this.sdkState = 'destroyed';
+          this.resetBehaviorRisk();
+          this.log('SDK 已销毁');
+        },
+
+        resetBehaviorRisk() {
+          this.behaviorRisk = { score: 100, total: 0, trusted_count: 0, untrusted_events: 0, untrusted_ratio: 0, mouse_linear: false, mouse_straight_ratio: 0, kbd_uniform: false, zero_clicks: 0, signals: [] };
+          this._moveFeatures = [];
+          this._keyIntervals = [];
+          this.formResult = null;
+        },
+
+        // --- 表单检测（由 SDK FormDetector 处理） ---
+
+        analyzeBehavior(stream) {
+          const risk = this.behaviorRisk;
+
+          // isTrusted 统计（click_tracks + touch_events + keyboard_stream 聚合计数）
+          const untrustedClicks = stream.click_tracks.filter(t => !t.is_trusted).length;
+          const trustedClicks = stream.click_tracks.length - untrustedClicks;
+          const untrustedTouch = stream.touch_events.filter(t => !t.is_trusted).length;
+          const trustedTouch = stream.touch_events.length - untrustedTouch;
+          const trustedKbd = stream.keyboard_stream.reduce((s, k) => s + k.trusted_count, 0);
+          const untrustedKbd = stream.keyboard_stream.reduce((s, k) => s + (k.key_count - k.trusted_count), 0);
+
+          risk.trusted_count += trustedClicks + trustedTouch + trustedKbd;
+          const batchUntrusted = untrustedClicks + untrustedTouch + untrustedKbd;
+          if (batchUntrusted > 0) {
+            risk.untrusted_events += batchUntrusted;
+          }
+          const denom = risk.trusted_count + risk.untrusted_events;
+          risk.untrusted_ratio = denom > 0 ? risk.untrusted_events / denom : 0;
+
+          // 累积 move_features 的 straight_ratio（每批一条，用于判断轨迹机械度）
+          if (stream.move_features.count > 0) {
+            this._moveFeatures.push({
+              straight_ratio: stream.move_features.straight_ratio,
+              avg_speed: stream.move_features.avg_speed,
+              pause_count: stream.move_features.pause_count,
+              count: stream.move_features.count,
+            });
+            if (this._moveFeatures.length > 10) this._moveFeatures.splice(0, this._moveFeatures.length - 10);
+          }
+
+          // 累积键盘间隔
+          stream.keyboard_stream.forEach(k => {
+            if (k.interval_avg > 0) this._keyIntervals.push(k.interval_avg);
+          });
+          if (this._keyIntervals.length > 50) this._keyIntervals.splice(0, this._keyIntervals.length - 50);
+
+          // 零坐标点击（click_tracks 中 x/y 同时为 0）
+          const zeroClicks = stream.click_tracks.filter(t => t.x === 0 && t.y === 0).length;
+          risk.zero_clicks += zeroClicks;
+
+          // --- 分析 ---
+          const signals = [];
+
+          // 1. isTrusted 比例
+          if (risk.untrusted_ratio > 0.3) signals.push('untrusted_events');
+
+          // 2. 鼠标轨迹机械度：多批 straight_ratio 加权平均
+          if (this._moveFeatures.length >= 2) {
+            let totalCount = 0, weighted = 0;
+            for (const f of this._moveFeatures) {
+              weighted += f.straight_ratio * f.count;
+              totalCount += f.count;
+            }
+            const avgStraight = totalCount > 0 ? weighted / totalCount : 0;
+            const isLinear = avgStraight > 0.85;
+            risk.mouse_linear = isLinear;
+            risk.mouse_straight_ratio = Math.round(avgStraight * 100) / 100;
+            if (isLinear) signals.push('mouse_linear');
+          }
+
+          // 3. 键盘间隔均匀度（CV）
+          if (this._keyIntervals.length >= 4) {
+            const avg = this._keyIntervals.reduce((s, v) => s + v, 0) / this._keyIntervals.length;
+            const std = Math.sqrt(this._keyIntervals.reduce((s, v) => s + (v - avg) ** 2, 0) / this._keyIntervals.length);
+            const cv = avg > 0 ? std / avg : 0;
+            risk.kbd_uniform = cv < 0.2;
+            if (risk.kbd_uniform) signals.push('kbd_uniform');
+          }
+
+          // 4. 零坐标点击
+          if (risk.zero_clicks >= 3) signals.push('zero_coord_click');
+
+          // 综合评分
+          risk.signals = signals;
+          risk.total = risk.trusted_count + risk.untrusted_events;
+          let deduction = 0;
+          if (risk.untrusted_ratio > 0.3) deduction += 30;
+          if (risk.mouse_linear) deduction += 20;
+          if (risk.kbd_uniform) deduction += 20;
+          if (risk.zero_clicks >= 3) deduction += 20;
+          risk.score = Math.max(0, 100 - deduction);
+        },
+
+        async refreshEnv() {
+          try {
+            const info = await BehaviorTrack.getEnvInfo();
+            this.env = {
+              device_id: info.device_id,
+              fingerprint: info.fingerprint,
+              page_context: info.page_context,
+              browser: info.browser,
+              browser_version: info.browser_version,
+              os: info.os,
+              device_type: info.device_type,
+              user_agent: info.user_agent,
+              webrtc_ips: info.webrtc_ips,
+              risk_indicators: info.risk_indicators,
+              integrity_check: info.integrity_check,
+            };
+            this.envError = '';
+            this.log('环境信息已刷新');
+          } catch (e) {
+            this.envError = '获取环境信息失败: ' + e.message;
+          }
+        },
+
+        handleLogin() {
+          if (this.sdkState !== 'active') {
+            this.loginHint = '请先点击上方「初始化」按钮启动 SDK';
+            return;
+          }
+          this.loginHint = '';
+        },
+
+      },
+
+      created() {
+        this.interceptConsoleLog();
+        this.initSDK();
+      },
+    });
+
+    window.vm = app.mount('#app'); // 暴露 Vue 实例到全局，方便调试
+  </script>
+</body>
+</html>
