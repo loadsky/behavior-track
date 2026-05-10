@@ -29,6 +29,10 @@ export class Lifecycle {
     this._state = 'destroyed';
   }
 
+  reset(): void {
+    this._state = 'idle';
+  }
+
   isActive(): boolean {
     return this._state === 'active';
   }

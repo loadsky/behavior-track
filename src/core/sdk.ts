@@ -25,6 +25,7 @@ export class BehaviorTrackSDK {
   private formDetectors: FormDetector[] = [];
   private transport: TransportManager | null = null;
   private sequenceNo = 0;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   async init(config: SDKConfig): Promise<void> {
     if (this.lifecycle.state !== 'idle') return;
@@ -95,6 +96,10 @@ export class BehaviorTrackSDK {
 
   destroy(): void {
     this.lifecycle.destroy();
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
     this.behaviorManager?.stop();
     this.behaviorManager = null;
     for (const fd of this.formDetectors) {
@@ -104,6 +109,10 @@ export class BehaviorTrackSDK {
     this.transport?.flush();
     this.transport = null;
     this.eventBus.clear();
+    this.envPromise = null;
+    this.sessionId = '';
+    this.sequenceNo = 0;
+    this.lifecycle.reset();
   }
 
   private async collectEnv(): Promise<EnvStaticReport> {
@@ -233,8 +242,11 @@ export class BehaviorTrackSDK {
     };
 
     const scheduleNext = () => {
-      if (this.lifecycle.state === 'destroyed') return;
-      setTimeout(flushBehavior, this.config.batchInterval);
+      if (this.lifecycle.state === 'destroyed') {
+        this.flushTimer = null;
+        return;
+      }
+      this.flushTimer = setTimeout(flushBehavior, this.config.batchInterval);
     };
 
     scheduleNext();
