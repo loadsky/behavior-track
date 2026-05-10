@@ -544,20 +544,14 @@ export class FormDetector {
 
     const fillDuration = this.lastInputTime - this.firstInputTime;
 
-    // 1. 填写总时长过短（粘贴字段字符不计入）
-    if (fillDuration > 0 && fillDuration < 500 && totalChars > 10) {
-      this._shsCodes.push(ShsCodes.FILL_TOO_FAST);
-      checks.push(true);
-    }
-
-    // 2. 极速填写（批量赋值；排除纯粘贴场景）
+    // 1. 极速填写（批量赋值；排除纯粘贴场景）
     const untrustedInputCount = fieldsWithInput.filter(s => !s.inputTrusted && !s.hadPaste).length;
     if (fillDuration === 0 && totalChars > 0 && untrustedInputCount > 0) {
       this._shsCodes.push(ShsCodes.BATCH_ASSIGN);
       checks.push(true);
     }
 
-    // 3. 打字速度超人类（粘贴字段字符不计入）
+    // 2. 打字速度超人类（粘贴字段字符不计入）
     if (fillDuration > 0) {
       const cps = totalChars / (fillDuration / 1000);
       if (cps > 20) {
@@ -566,14 +560,14 @@ export class FormDetector {
       }
     }
 
-    // 4. 按键间隔均匀度
+    // 3. 按键间隔均匀度
     const cadence = this.buildTypingCadence();
     if (cadence.totalKeys > 10 && cadence.intervalCV < 0.1) {
       this._shsCodes.push(ShsCodes.UNIFORM_INTERVALS);
       checks.push(true);
     }
 
-    // 5. 孤立 keydown（阈值 >=5，避免 IME/修饰键/快速提交误报）
+    // 4. 孤立 keydown（阈值 >=5，避免 IME/修饰键/快速提交误报）
     if (cadence.orphanKeydowns >= 5) {
       this._shsCodes.push(ShsCodes.ORPHAN_KEYDOWN);
       checks.push(true);

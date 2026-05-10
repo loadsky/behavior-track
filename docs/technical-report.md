@@ -408,7 +408,6 @@ interface FormDetectConfig {
 
 | 代码 | 判据 |
 |---|---|
-| `FILL_TOO_FAST` | 填写时长 > 0 且 < 500ms，且 totalChars > 10 |
 | `BATCH_ASSIGN` | fillDuration === 0（瞬时赋值）且存在非可信 input |
 | `TYPING_TOO_FAST` | 字符/秒 (cps) > 20 |
 | `UNIFORM_INTERVALS` | 总按键 > 10，按键间隔变异系数 CV < 0.1 |
@@ -645,7 +644,6 @@ fillDuration = lastInputTime - firstInputTime  // performance.now()
 totalChars = Σ field.value.length
 cps = totalChars / (fillDuration / 1000)
 
-FILL_TOO_FAST: 0 < fillDuration < 500 && totalChars > 10
 BATCH_ASSIGN:  fillDuration === 0 && 存在非可信 input
 TYPING_TOO_FAST: cps > 20
 ```

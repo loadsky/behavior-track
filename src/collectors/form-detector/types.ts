@@ -13,7 +13,6 @@ export const ScbCodes = {
 
 /** superHumanSpeed 子信号 */
 export const ShsCodes = {
-  FILL_TOO_FAST: 'fill_too_fast',
   BATCH_ASSIGN: 'batch_assign',
   TYPING_TOO_FAST: 'typing_too_fast',
   UNIFORM_INTERVALS: 'uniform_intervals',
