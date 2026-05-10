@@ -586,7 +586,7 @@ export class FormDetector {
     const checks: boolean[] = [];
 
     // 1. 零坐标点击
-    const zeroClicks = this.clickRecords.filter(r => r.x === 0 && r.y === 0);
+    const zeroClicks = this.clickRecords.filter(r => r.x === 0 && r.y === 0 && !r.isTrusted);
     if (zeroClicks.length > 0) {
       this._cdpCodes.push(CdpCodes.ZERO_COORD_CLICK);
       return true;
