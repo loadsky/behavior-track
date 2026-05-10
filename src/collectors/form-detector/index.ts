@@ -10,6 +10,31 @@ import type {
 import { ScbCodes, ShsCodes, CdpCodes } from './types';
 import { safeExec } from '../../utils/safe-exec';
 
+const SCOPE = 'form_detector';
+
+type DocObserverSub = (root: Document) => void;
+let sharedDocObserver: MutationObserver | null = null;
+const docObserverSubs = new Set<DocObserverSub>();
+
+function subscribeDocObserver(sub: DocObserverSub): () => void {
+  docObserverSubs.add(sub);
+  if (!sharedDocObserver && typeof MutationObserver !== 'undefined') {
+    sharedDocObserver = new MutationObserver(() => {
+      for (const s of docObserverSubs) {
+        safeExec(() => s(document), undefined, SCOPE);
+      }
+    });
+    sharedDocObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  return () => {
+    docObserverSubs.delete(sub);
+    if (docObserverSubs.size === 0 && sharedDocObserver) {
+      sharedDocObserver.disconnect();
+      sharedDocObserver = null;
+    }
+  };
+}
+
 export class FormDetector {
   private config: FormDetectConfig;
   private container: HTMLElement | null = null;
@@ -20,10 +45,12 @@ export class FormDetector {
   private clickRecords: ClickRecord[] = [];
   private keyRecords: KeyRecord[] = [];
   private lastMouseMove: { x: number; y: number; t: number } | null = null;
+  private composing = false;
 
   private firstInputTime = 0;
   private lastInputTime = 0;
   private lastResult: FormDetectionResult | null = null;
+  private analyzeScheduled = false;
 
   private boundHandlers: Array<{
     target: EventTarget;
@@ -33,6 +60,7 @@ export class FormDetector {
   }> = [];
 
   private containerObserver: MutationObserver | null = null;
+  private unsubscribeDoc: (() => void) | null = null;
 
   constructor(config: FormDetectConfig) {
     this.config = config;
@@ -71,6 +99,10 @@ export class FormDetector {
       this.containerObserver.disconnect();
       this.containerObserver = null;
     }
+    if (this.unsubscribeDoc) {
+      this.unsubscribeDoc();
+      this.unsubscribeDoc = null;
+    }
     this.fieldStates.clear();
     this.clickRecords = [];
     this.keyRecords = [];
@@ -95,17 +127,20 @@ export class FormDetector {
   private bindContainer(container: HTMLElement): void {
     this.scanFields();
 
-    this.on(container, 'click', this.handleFieldClick);
-    this.on(container, 'input', this.handleFieldInput);
-    this.on(container, 'keydown', this.handleFieldKeydown);
-    this.on(document, 'keydown', this.handleGlobalKeydown);
-    this.on(document, 'keyup', this.handleGlobalKeyup);
-    this.on(document, 'mousemove', this.handleGlobalMouseMove);
+    this.on(container, 'click', this.handleFieldClick, { passive: true });
+    this.on(container, 'input', this.handleFieldInput, { passive: true });
+    this.on(container, 'keydown', this.handleFieldKeydown, { passive: true });
+    this.on(container, 'compositionstart', this.handleCompositionStart, { passive: true });
+    this.on(container, 'compositionend', this.handleCompositionEnd, { passive: true });
+    this.on(container, 'paste', this.handleFieldPaste, { passive: true });
+    this.on(document, 'keydown', this.handleGlobalKeydown, { passive: true });
+    this.on(document, 'keyup', this.handleGlobalKeyup, { passive: true });
+    this.on(document, 'mousemove', this.handleGlobalMouseMove, { passive: true });
 
     if (this.actionEl) {
-      this.on(this.actionEl, 'click', this.handleAction);
+      this.on(this.actionEl, 'click', this.handleAction, { passive: true });
     }
-    this.on(container, 'keydown', this.handleEnterSubmit);
+    this.on(container, 'keydown', this.handleEnterSubmit, { passive: true });
 
     this.containerObserver = new MutationObserver(() => {
       this.scanFields();
@@ -114,11 +149,8 @@ export class FormDetector {
   }
 
   private observeDocument(): void {
-    const docObserver = new MutationObserver(() => {
-      if (this.destroyed) {
-        docObserver.disconnect();
-        return;
-      }
+    this.unsubscribeDoc = subscribeDocObserver(() => {
+      if (this.destroyed) return;
       if (!this.container) {
         const c = document.querySelector(this.config.containerSelector) as HTMLElement | null;
         if (c) {
@@ -127,13 +159,6 @@ export class FormDetector {
           this.bindContainer(c);
         }
       }
-    });
-    docObserver.observe(document.documentElement, { childList: true, subtree: true });
-
-    this.boundHandlers.push({
-      target: document.documentElement,
-      type: '__doc_observer__',
-      handler: () => docObserver.disconnect(),
     });
   }
 
@@ -152,6 +177,7 @@ export class FormDetector {
           hadClick: false,
           hadInput: false,
           hadKeydown: false,
+          hadPaste: false,
           inputTrusted: true,
           firstInputTime: 0,
           lastInputTime: 0,
@@ -244,6 +270,9 @@ export class FormDetector {
     const state = this.fieldStates.get(target);
     if (!state) return;
 
+    const ie = e as InputEvent;
+    if (this.composing || ie.isComposing) return;
+
     const now = performance.now();
 
     if (!state.hadInput) {
@@ -271,8 +300,23 @@ export class FormDetector {
     }
   };
 
+  private handleCompositionStart = (): void => {
+    this.composing = true;
+  };
+
+  private handleCompositionEnd = (): void => {
+    this.composing = false;
+  };
+
+  private handleFieldPaste = (e: Event): void => {
+    const target = e.target as Element;
+    const state = this.fieldStates.get(target);
+    if (state) state.hadPaste = true;
+  };
+
   private handleGlobalKeydown = (e: Event): void => {
     const ke = e as KeyboardEvent;
+    if (this.composing || ke.isComposing || ke.keyCode === 229) return;
     this.keyRecords.push({ t: Date.now(), isTrusted: ke.isTrusted, key: ke.key, hadKeyup: false });
     if (this.keyRecords.length > 300) {
       this.keyRecords.splice(0, this.keyRecords.length - 300);
@@ -296,7 +340,7 @@ export class FormDetector {
   };
 
   private handleAction = (): void => {
-    this.analyze();
+    this.scheduleAnalyze();
   };
 
   private handleEnterSubmit = (e: Event): void => {
@@ -304,10 +348,25 @@ export class FormDetector {
     if (ke.key === 'Enter' && !ke.shiftKey && !ke.ctrlKey && !ke.metaKey) {
       const target = e.target as Element;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        this.analyze();
+        this.scheduleAnalyze();
       }
     }
   };
+
+  private scheduleAnalyze(): void {
+    if (this.destroyed || this.analyzeScheduled) return;
+    this.analyzeScheduled = true;
+    const run = () => {
+      this.analyzeScheduled = false;
+      this.analyze();
+    };
+    const ric = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    if (typeof ric === 'function') {
+      ric(run, { timeout: 200 });
+    } else {
+      setTimeout(run, 0);
+    }
+  }
 
   // ========== 分析入口 ==========
 
@@ -349,7 +408,7 @@ export class FormDetector {
 
     safeExec(() => {
       this.config.onResult(result);
-    }, undefined);
+    }, undefined, SCOPE);
   }
 
   // ----- suspiciousClientSideBehavior -----
@@ -360,10 +419,10 @@ export class FormDetector {
     this._scbCodes = [];
     const checks: boolean[] = [];
 
-    // 1. 有值但无键盘事件（仅非可信 input 事件视为可疑，排除浏览器自动填充）
+    // 1. 有值但无键盘事件（排除浏览器自动填充和粘贴）
     const noKbdFields: string[] = [];
     for (const [, state] of this.fieldStates) {
-      if (state.hadInput && !state.hadKeydown && !state.inputTrusted && state.totalChars > 0) {
+      if (state.hadInput && !state.hadKeydown && !state.inputTrusted && !state.hadPaste && state.totalChars > 0) {
         noKbdFields.push(state.fieldName);
       }
     }
@@ -454,10 +513,15 @@ export class FormDetector {
 
     const fieldsWithInput: FieldState[] = [];
     let totalChars = 0;
+    let pasteChars = 0;
     for (const [, state] of this.fieldStates) {
       if (state.hadInput && state.totalChars > 0) {
         fieldsWithInput.push(state);
-        totalChars += state.totalChars;
+        if (state.hadPaste) {
+          pasteChars += state.totalChars;
+        } else {
+          totalChars += state.totalChars;
+        }
       }
     }
 
@@ -465,20 +529,20 @@ export class FormDetector {
 
     const fillDuration = this.lastInputTime - this.firstInputTime;
 
-    // 1. 填写总时长过短
+    // 1. 填写总时长过短（粘贴字段字符不计入）
     if (fillDuration > 0 && fillDuration < 500 && totalChars > 10) {
       this._shsCodes.push(ShsCodes.FILL_TOO_FAST);
       checks.push(true);
     }
 
-    // 2. 极速填写（无时间差=批量赋值，仅非可信 input 视为可疑）
-    const untrustedInputCount = fieldsWithInput.filter(s => !s.inputTrusted).length;
+    // 2. 极速填写（批量赋值；排除纯粘贴场景）
+    const untrustedInputCount = fieldsWithInput.filter(s => !s.inputTrusted && !s.hadPaste).length;
     if (fillDuration === 0 && totalChars > 0 && untrustedInputCount > 0) {
       this._shsCodes.push(ShsCodes.BATCH_ASSIGN);
       checks.push(true);
     }
 
-    // 3. 打字速度超人类
+    // 3. 打字速度超人类（粘贴字段字符不计入）
     if (fillDuration > 0) {
       const cps = totalChars / (fillDuration / 1000);
       if (cps > 20) {

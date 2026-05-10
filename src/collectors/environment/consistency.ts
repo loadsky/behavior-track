@@ -1,5 +1,7 @@
 import { safeExec } from '../../utils/safe-exec';
 
+const SCOPE = 'consistency';
+
 export interface ConsistencyResult {
   ua_consistent: boolean;
   signals: string[];
@@ -20,33 +22,33 @@ export function detectConsistency(): ConsistencyResult {
     if (ua.includes('Linux') && !platform.includes('linux') && !platform.includes('android')) {
       signals.push('ua_platform_mismatch');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     if (ua.includes('Mobile') && navigator.maxTouchPoints === 0) {
       signals.push('mobile_no_touch');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     if (ua.includes('Android') && screen.width > 2000 && navigator.maxTouchPoints === 0) {
       signals.push('android_desktop_screen');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     const fnStr = navigator.userAgent.toString();
     if (!fnStr.includes('[native code]') && fnStr.includes('function')) {
       signals.push('ua_tampered');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     const navProto = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');
     if (navProto && navProto.get && !/\[native code\]/.test(navProto.get.toString())) {
       signals.push('navigator_proxy');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   return {
     ua_consistent: signals.length === 0,

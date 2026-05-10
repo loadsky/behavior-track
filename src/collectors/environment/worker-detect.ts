@@ -1,5 +1,7 @@
 import { safeExec } from '../../utils/safe-exec';
 
+const SCOPE = 'worker_detect';
+
 export interface WorkerResult {
   is_consistent: boolean;
   is_cdp: boolean;
@@ -27,7 +29,7 @@ export function detectWorkerConsistency(): Promise<WorkerResult> {
           let triggered = false;
           const orig = Error.prepareStackTrace;
           Error.prepareStackTrace = function() { triggered = true; return orig; };
-          console.log(new Error(''));
+          console.debug(new Error(''));
           Error.prepareStackTrace = orig;
           result.cdp = triggered;
         } catch(_) { result.cdp = false; }
@@ -68,6 +70,6 @@ export function detectWorkerConsistency(): Promise<WorkerResult> {
         done({ is_consistent: true, is_cdp: false, signals: [] });
         worker.terminate();
       };
-    }, undefined);
+    }, undefined, SCOPE);
   });
 }

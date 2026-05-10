@@ -1,5 +1,7 @@
 import { safeExec } from '../../utils/safe-exec';
 
+const SCOPE = 'devtools';
+
 export interface DevtoolsResult {
   is_open: boolean;
   is_cdp: boolean;
@@ -10,14 +12,17 @@ export function detectDevtools(): DevtoolsResult {
   const signals: string[] = [];
 
   safeExec(() => {
-    const threshold = 160;
-    if (
-      window.outerWidth - window.innerWidth > threshold ||
-      window.outerHeight - window.innerHeight > threshold
-    ) {
+    const ow = window.outerWidth;
+    const oh = window.outerHeight;
+    const iw = window.innerWidth;
+    const ih = window.innerHeight;
+    if (ow < 50 || oh < 50) return;
+    const rw = iw / ow;
+    const rh = ih / oh;
+    if (rw < 0.88 || rh < 0.88) {
       signals.push('size_diff');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     const el = new Image();
@@ -29,7 +34,7 @@ export function detectDevtools(): DevtoolsResult {
     });
     // eslint-disable-next-line no-console
     console.debug('%c', el as unknown as string);
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     let triggered = false;
@@ -40,10 +45,10 @@ export function detectDevtools(): DevtoolsResult {
       return orig;
     };
     // eslint-disable-next-line no-console
-    console.log(new Error(''));
+    console.debug(new Error(''));
     Err.prepareStackTrace = orig;
     if (triggered) signals.push('cdp_runtime');
-  }, undefined);
+  }, undefined, SCOPE);
 
   const hasSizeDiff = signals.includes('size_diff');
   const hasCdp = signals.includes('cdp_runtime');

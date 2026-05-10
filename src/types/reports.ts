@@ -44,6 +44,7 @@ export interface EnvStaticReport {
   os: string;
   device_type: 'PC' | 'Mobile' | 'Tablet';
   risk_indicators: RiskIndicators;
+  error_counts?: Record<string, number>;
   integrity_check: string;
 }
 

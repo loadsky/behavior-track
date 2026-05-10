@@ -1,5 +1,7 @@
 import { safeExecAsync } from '../utils/safe-exec';
 
+const SCOPE = 'webrtc';
+
 export interface WebRTCInfo {
   ips: string[];
 }
@@ -39,5 +41,5 @@ export async function collectWebRTC(): Promise<WebRTCInfo> {
     await ipPromise;
 
     return result;
-  }, { ips: [] });
+  }, { ips: [] }, SCOPE);
 }

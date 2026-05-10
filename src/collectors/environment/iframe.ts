@@ -1,5 +1,7 @@
 import { safeExec } from '../../utils/safe-exec';
 
+const SCOPE = 'iframe';
+
 export interface IframeResult {
   is_overridden: boolean;
   is_webdriver: boolean;
@@ -33,7 +35,7 @@ export function detectIframe(): IframeResult {
     }
 
     document.body.removeChild(iframe);
-  }, undefined);
+  }, undefined, SCOPE);
 
   return {
     is_overridden: signals.some(s => s.startsWith('iframe_') && s !== 'iframe_webdriver'),

@@ -10,6 +10,8 @@ const BehaviorTrack = {
   detect: (config: FormDetectConfig) => instance.detect(config),
   pause: () => instance.pause(),
   resume: () => instance.resume(),
+  resetSession: () => instance.resetSession(),
+  getDiagnostics: () => instance.getDiagnostics(),
   destroy: () => instance.destroy(),
 };
 

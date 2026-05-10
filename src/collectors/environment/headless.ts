@@ -1,5 +1,7 @@
 import { safeExec } from '../../utils/safe-exec';
 
+const SCOPE = 'headless';
+
 export interface HeadlessResult {
   is_headless: boolean;
   signals: string[];
@@ -12,37 +14,37 @@ export function detectHeadless(): HeadlessResult {
     if (navigator.plugins && navigator.plugins.length === 0) {
       signals.push('no_plugins');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     if (!navigator.languages || navigator.languages.length === 0) {
       signals.push('no_languages');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     if (/HeadlessChrome/.test(navigator.userAgent)) {
       signals.push('headless_ua');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     if (!(window as unknown as Record<string, unknown>).chrome && /Chrome/.test(navigator.userAgent)) {
       signals.push('chrome_obj_missing');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     if (window.outerWidth === 0 && window.outerHeight === 0) {
       signals.push('zero_outer_dimensions');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     if (Notification.permission === 'denied' && !navigator.userAgent.includes('Firefox')) {
       signals.push('notification_denied_default');
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   safeExec(() => {
     const canvas = document.createElement('canvas');
@@ -56,7 +58,7 @@ export function detectHeadless(): HeadlessResult {
         }
       }
     }
-  }, undefined);
+  }, undefined, SCOPE);
 
   return {
     is_headless: signals.length >= 2,

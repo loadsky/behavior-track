@@ -729,8 +729,8 @@ integrity_check = sha256(fastJsonStableStringify(payload))
 | 10 | ~~`RetryQueue.pending/addToPending/drainPending` 定义未用~~ | 已删除 | ✅ |
 | 11 | ~~`trustedClicks` 变量定义未读~~ | 实际被 `analyzeSuspiciousBehavior` 使用（行 458），非死代码 | ✅ 误报 |
 | 12 | `devtools.ts` 尺寸差 160 阈值在高 DPI/小窗口误判 | 仅作弱信号已可接受；可上报 innerHeight/Width 供服务端复核 | 待解决 |
-| 13 | 表单 `keydown` 监听未 `passive`，Enter 触发 `analyze()` 同步执行 | 放入 `queueMicrotask` | 待解决 |
-| 14 | 行为流 `mouse_tracks` 无上限 | 每 Tracker 设硬上限（e.g. 2000） | 待解决 |
+| 13 | ~~表单 `keydown` 监听未 `passive`，Enter 触发 `analyze()` 同步执行~~ | 全部监听改 `{ passive: true }`；Enter/action 走 `scheduleAnalyze()`，`requestIdleCallback` 异步合并执行 | ✅ |
+| 14 | ~~行为流 `mouse_tracks` 无上限~~ | `MouseTracker` 硬上限 `MAX_TRACKS = 2000`，超限环形丢弃最早记录 | ✅ |
 | 15 | `examples/index.html` 依赖 CDN Tailwind + Vue | 网络受限环境无法本地跑；考虑预打包 vendor | 待解决 |
 | 16 | 默认 `endpoint = ''` 导致 beacon 发到空路径 | 空 endpoint 时 warn | 待解决 |
 

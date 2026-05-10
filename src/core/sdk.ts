@@ -12,6 +12,7 @@ import { FormDetector } from '../collectors/form-detector';
 import { TransportManager } from '../transport';
 import { parseBrowser, getPageContext } from '../utils/browser';
 import { signReport } from '../utils/integrity';
+import { snapshotErrorCounts, resetErrorCounts } from '../utils/diagnostics';
 
 export class BehaviorTrackSDK {
   private config!: ResolvedConfig;
@@ -74,6 +75,22 @@ export class BehaviorTrackSDK {
   resume(): void {
     this.lifecycle.resume();
     this.behaviorManager?.start();
+  }
+
+  resetSession(): string {
+    if (this.lifecycle.state === 'destroyed') return this.sessionId;
+    this.sessionId = generateSessionId();
+    this.sequenceNo = 0;
+    resetErrorCounts();
+    return this.sessionId;
+  }
+
+  getDiagnostics(): { error_counts: Record<string, number>; session_id: string; sequence_no: number } {
+    return {
+      error_counts: snapshotErrorCounts(),
+      session_id: this.sessionId,
+      sequence_no: this.sequenceNo,
+    };
   }
 
   destroy(): void {
@@ -156,6 +173,11 @@ export class BehaviorTrackSDK {
     ri.is_form_cdp_mouse = formCDPMouse;
     ri.signals = [...ri.signals, ...formSignalStrings];
     ri.risk_score = this.computeUpdatedRiskScore(ri.risk_score, formSuspicious, formSuperHuman, formCDPMouse);
+
+    const errCounts = snapshotErrorCounts();
+    if (Object.keys(errCounts).length > 0) {
+      report.error_counts = errCounts;
+    }
 
     report.integrity_check = signReport(report as unknown as Record<string, unknown>);
 

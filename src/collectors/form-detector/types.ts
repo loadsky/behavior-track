@@ -61,6 +61,7 @@ export interface FieldState {
   hadClick: boolean;
   hadInput: boolean;
   hadKeydown: boolean;
+  hadPaste: boolean;
   inputTrusted: boolean;
   firstInputTime: number;
   lastInputTime: number;

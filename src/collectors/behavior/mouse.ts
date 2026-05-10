@@ -1,6 +1,9 @@
 import { throttle } from '../../utils/throttle';
 import type { MouseTrack } from '../../types/reports';
 
+const MAX_TRACKS = 2000;
+const WINDOW_MS = 60_000;
+
 export class MouseTracker {
   private tracks: MouseTrack[] = [];
   private handlers: Array<{ event: string; handler: EventListener }> = [];
@@ -8,7 +11,15 @@ export class MouseTracker {
   start(): void {
     const push = (e: Event, type: MouseTrack['type']) => {
       const me = e as globalThis.MouseEvent;
-      this.tracks.push({ x: me.clientX, y: me.clientY, t: Date.now(), type, is_trusted: e.isTrusted });
+      const now = Date.now();
+      const cutoff = now - WINDOW_MS;
+      let drop = 0;
+      while (drop < this.tracks.length && this.tracks[drop].t < cutoff) drop++;
+      if (drop > 0) this.tracks.splice(0, drop);
+      if (this.tracks.length >= MAX_TRACKS) {
+        this.tracks.splice(0, this.tracks.length - MAX_TRACKS + 1);
+      }
+      this.tracks.push({ x: me.clientX, y: me.clientY, t: now, type, is_trusted: e.isTrusted });
     };
 
     const onMove = throttle((e: Event) => push(e, 'move'), 50);
