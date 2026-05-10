@@ -7,7 +7,8 @@ import type {
   TypingCadence,
   IssueCode,
 } from './types';
-import { ScbCodes, ShsCodes, CdpCodes } from './types';
+import { ScbCodes, ShsCodes, CdpCodes, EnvCodes } from './types';
+import type { EnvRiskSnapshot } from './types';
 import { safeExec } from '../../utils/safe-exec';
 
 const SCOPE = 'form_detector';
@@ -61,10 +62,19 @@ export class FormDetector {
 
   private containerObserver: MutationObserver | null = null;
   private unsubscribeDoc: (() => void) | null = null;
+  private envRisk: EnvRiskSnapshot | null = null;
 
   constructor(config: FormDetectConfig) {
     this.config = config;
+    if (config.envRisk) this.envRisk = config.envRisk;
     this.resolveAndBind();
+  }
+
+  setEnvRisk(snapshot: EnvRiskSnapshot): void {
+    this.envRisk = snapshot;
+    if (this.lastResult) {
+      this.analyze();
+    }
   }
 
   getSignals(): {
@@ -384,13 +394,21 @@ export class FormDetector {
     const shs = this.analyzeSuperHumanSpeed();
     const cdpm = this.analyzeCDPMouseLeak();
 
-    const issues = this.collectIssues();
+    const formIssues = this.collectIssues();
+    const envIssues = this.collectEnvIssues();
+    const issues = [...formIssues, ...envIssues];
 
-    let riskScore = 0;
-    if (scb) riskScore += 40;
-    if (shs) riskScore += 35;
-    if (cdpm) riskScore += 25;
-    riskScore = Math.min(riskScore, 100);
+    const formSignals: { weight: number }[] = [];
+    if (scb) formSignals.push({ weight: 40 });
+    if (shs) formSignals.push({ weight: 35 });
+    if (cdpm) formSignals.push({ weight: 25 });
+    formSignals.sort((a, b) => b.weight - a.weight);
+
+    let riskScore = this.envRisk?.risk_score ?? 0;
+    for (let i = 0; i < formSignals.length; i++) {
+      riskScore += formSignals[i].weight * Math.pow(0.6, i);
+    }
+    riskScore = Math.min(Math.round(riskScore), 100);
 
     const result: FormDetectionResult = {
       is_pass: riskScore < 40,
@@ -658,6 +676,19 @@ export class FormDetector {
     issues.push(...this._scbCodes);
     issues.push(...this._shsCodes);
     issues.push(...this._cdpCodes);
+    return issues;
+  }
+
+  private collectEnvIssues(): IssueCode[] {
+    const issues: IssueCode[] = [];
+    if (!this.envRisk) return issues;
+    if (this.envRisk.is_cdp) issues.push(EnvCodes.ENV_CDP_DETECTED);
+    if (this.envRisk.is_devtools_open) issues.push(EnvCodes.ENV_DEVTOOLS_OPEN);
+    if (this.envRisk.is_webdriver) issues.push(EnvCodes.ENV_WEBDRIVER);
+    if (this.envRisk.is_headless) issues.push(EnvCodes.ENV_HEADLESS);
+    if (this.envRisk.worker_cdp) issues.push(EnvCodes.ENV_WORKER_CDP);
+    if (this.envRisk.is_tampered) issues.push(EnvCodes.ENV_TAMPERED);
+    if (!this.envRisk.ua_consistent) issues.push(EnvCodes.ENV_UA_INCONSISTENT);
     return issues;
   }
 }

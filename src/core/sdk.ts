@@ -1,4 +1,5 @@
 import type { SDKConfig, ResolvedConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig } from '../types';
+import type { EnvRiskSnapshot } from '../collectors/form-detector/types';
 import { resolveConfig } from './config';
 import { EventBus } from './event-bus';
 import { Lifecycle } from './lifecycle';
@@ -28,6 +29,7 @@ export class BehaviorTrackSDK {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private currentRiskScore = 0;
   private rawWindowRemaining = 0;
+  private lastEnvSnapshot: EnvRiskSnapshot | null = null;
 
   async init(config: SDKConfig): Promise<void> {
     if (this.lifecycle.state !== 'idle') return;
@@ -69,6 +71,7 @@ export class BehaviorTrackSDK {
     const originalOnResult = config.onResult;
     const wrapped: FormDetectConfig = {
       ...config,
+      envRisk: this.lastEnvSnapshot ?? undefined,
       onResult: (result) => {
         if (typeof result.risk_score === 'number' && result.risk_score > this.currentRiskScore) {
           this.currentRiskScore = result.risk_score;
@@ -176,6 +179,14 @@ export class BehaviorTrackSDK {
 
     // 合并表单检测信号
     const ri = report.risk_indicators;
+
+    // 在合并之前，将原始环境风险快照推入表单检测器
+    const envSnapshot = this.buildEnvSnapshot(ri);
+    this.lastEnvSnapshot = envSnapshot;
+    for (const fd of this.formDetectors) {
+      fd.setEnvRisk(envSnapshot);
+    }
+
     let formSuspicious = false;
     let formSuperHuman = false;
     let formCDPMouse = false;
@@ -208,6 +219,20 @@ export class BehaviorTrackSDK {
 
     this.transport?.send(report);
     return report;
+  }
+
+  private buildEnvSnapshot(ri: EnvStaticReport['risk_indicators']): EnvRiskSnapshot {
+    return {
+      risk_score: ri.risk_score,
+      signals: ri.signals,
+      is_cdp: ri.is_cdp,
+      is_devtools_open: ri.is_devtools_open,
+      is_webdriver: ri.is_webdriver,
+      is_headless: ri.is_headless,
+      worker_cdp: ri.worker_cdp,
+      is_tampered: ri.is_tampered,
+      ua_consistent: ri.ua_consistent,
+    };
   }
 
   private computeUpdatedRiskScore(baseScore: number, formSuspicious: boolean, formSuperHuman: boolean, formCDPMouse: boolean): number {

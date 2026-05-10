@@ -28,10 +28,35 @@ export const CdpCodes = {
   OFFSET_ANOMALY: 'offset_anomaly',
 } as const;
 
+/** 环境风险子信号 */
+export const EnvCodes = {
+  ENV_CDP_DETECTED: 'env_cdp_detected',
+  ENV_DEVTOOLS_OPEN: 'env_devtools_open',
+  ENV_WEBDRIVER: 'env_webdriver',
+  ENV_HEADLESS: 'env_headless',
+  ENV_WORKER_CDP: 'env_worker_cdp',
+  ENV_TAMPERED: 'env_tampered',
+  ENV_UA_INCONSISTENT: 'env_ua_inconsistent',
+} as const;
+
 export type IssueCode =
   | (typeof ScbCodes)[keyof typeof ScbCodes]
   | (typeof ShsCodes)[keyof typeof ShsCodes]
-  | (typeof CdpCodes)[keyof typeof CdpCodes];
+  | (typeof CdpCodes)[keyof typeof CdpCodes]
+  | (typeof EnvCodes)[keyof typeof EnvCodes];
+
+/** 传递给表单检测器的环境风险快照 */
+export interface EnvRiskSnapshot {
+  risk_score: number;
+  signals: string[];
+  is_cdp: boolean;
+  is_devtools_open: boolean;
+  is_webdriver: boolean;
+  is_headless: boolean;
+  worker_cdp: boolean;
+  is_tampered: boolean;
+  ua_consistent: boolean;
+}
 
 // ====== 公共类型 ======
 
@@ -39,6 +64,7 @@ export interface FormDetectConfig {
   containerSelector: string;
   actionSelector: string;
   onResult: (result: FormDetectionResult) => void;
+  envRisk?: EnvRiskSnapshot;
 }
 
 export interface FormDetectionResult {
