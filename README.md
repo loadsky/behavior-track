@@ -23,7 +23,7 @@ Web 前端环境安全识别与行为风控 SDK。通过多维环境指纹检测
 ## 安装
 
 ```bash
-npm install behavior-track
+pnpm install behavior-track
 ```
 
 ## 使用
