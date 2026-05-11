@@ -18,6 +18,10 @@ export declare class FormDetector {
     private containerObserver;
     private unsubscribeDoc;
     private envRisk;
+    private actionClickState;
+    /** action 按钮有点击且存在至少一种可疑模式时，允许所有点击检测项进入分析 */
+    private isActionClickSuspicious;
+    private resetActionClickState;
     constructor(config: FormDetectConfig);
     setEnvRisk(snapshot: EnvRiskSnapshot): void;
     getSignals(): {
