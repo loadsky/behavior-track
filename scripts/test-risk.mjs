@@ -29,14 +29,16 @@ function serve(root) {
   });
 }
 
+async function wait(ms) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
 async function collectRiskInfo(page) {
   return page.evaluate(async () => {
     const bt = window.__bt;
     if (!bt) return { error: 'BehaviorTrack not exposed to window' };
 
-    await bt.init({ appId: 'risk-test', enableFingerprint: true, enableEnvironment: true, enableBehavior: false, debug: false });
     const env = await bt.getEnvInfo();
-    bt.destroy();
     return {
       is_webdriver: env.risk_indicators.is_webdriver,
       is_headless: env.risk_indicators.is_headless,
@@ -64,7 +66,7 @@ async function collectRiskInfo(page) {
 }
 
 async function simulateFormSubmit(page) {
-  console.log('  模拟表单填写...');
+  console.log('  模拟表单填写 (Playwright)...');
 
   const email = page.locator('#login-email');
   await email.click();
@@ -75,6 +77,42 @@ async function simulateFormSubmit(page) {
   await page.keyboard.type('Password123!', { delay: 50 });
 
   await page.locator('#login-btn').click();
+  await page.waitForTimeout(500);
+
+  const formResult = await page.evaluate(() => {
+    return (window.vm && window.vm.formResult) || null;
+  });
+
+  if (formResult) {
+    console.log('  表单检测结果:');
+    console.log('    is_pass        :', formResult.is_pass);
+    console.log('    risk_score     :', formResult.risk_score, '/ 100');
+    console.log('    issues         :', formResult.issues.length > 0 ? formResult.issues.join(', ') : '(无)');
+    console.log('    signals:');
+    console.log('      suspicious_client_side_behavior:', formResult.signals.suspicious_client_side_behavior);
+    console.log('      super_human_speed              :', formResult.signals.super_human_speed);
+    console.log('      has_cdp_mouse_leak             :', formResult.signals.has_cdp_mouse_leak);
+  } else {
+    console.log('  表单检测结果: (未获取到)');
+  }
+}
+
+async function simulateFormSubmitCDP(page) {
+  console.log('  模拟表单填写 (CDP 原始指令)...');
+
+  // 全用 JS 设值 + 程序化点击，不产生键盘事件、无鼠标轨迹
+  await page.evaluate(() => {
+    const email = document.getElementById('login-email');
+    email.value = 'test@example.com';
+    email.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const pwd = document.getElementById('login-password');
+    pwd.value = 'Password123!';
+    pwd.dispatchEvent(new Event('input', { bubbles: true }));
+
+    document.getElementById('login-btn').click();
+  });
+
   await page.waitForTimeout(500);
 
   const formResult = await page.evaluate(() => {
@@ -136,6 +174,7 @@ const DPR = 2;
 
 let screenshotSeq = 0;
 async function screenshot(page) {
+  await wait(100); // 等待UI更新
   screenshotSeq++;
   const file = join(reportDir, `test_risk_${screenshotSeq}.png`);
   await page.screenshot({ path: file, fullPage: true });
@@ -190,14 +229,11 @@ console.log('\n=== 测试 3: CDP 远程连接 (Remote Debugging) ===');
   const { proc, wsEndpoint } = await launchChromeCDP();
   console.log('  CDP ws:', wsEndpoint);
   const browser = await chromium.connectOverCDP(wsEndpoint);
-  const page = browser.contexts()[0].pages()[0];
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setDeviceMetricsOverride', {
-    ...VP, deviceScaleFactor: DPR, mobile: false,
-  });
+  const context = await browser.newContext({ viewport: VP, deviceScaleFactor: DPR });
+  const page = await context.newPage();
   await page.goto(baseURL + '/examples/index.html', { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__bt);
-  await simulateFormSubmit(page);
+  await simulateFormSubmitCDP(page);
   const result = await collectRiskInfo(page);
   printResult(result);
   await screenshot(page);
