@@ -64,6 +64,24 @@ export class FormDetector {
   private unsubscribeDoc: (() => void) | null = null;
   private envRisk: EnvRiskSnapshot | null = null;
 
+  private actionClickState = {
+    count: 0,
+    centered: false,
+    corner: false,
+    noPrecedingMove: 0,
+    zeroCoord: false,
+  };
+
+  /** action 按钮有点击且存在至少一种可疑模式时，允许所有点击检测项进入分析 */
+  private isActionClickSuspicious(): boolean {
+    const s = this.actionClickState;
+    return s.count >= 1 && (s.centered || s.corner || s.noPrecedingMove > 0 || s.zeroCoord);
+  }
+
+  private resetActionClickState(): void {
+    this.actionClickState = { count: 0, centered: false, corner: false, noPrecedingMove: 0, zeroCoord: false };
+  }
+
   constructor(config: FormDetectConfig) {
     this.config = config;
     if (config.envRisk) this.envRisk = config.envRisk;
@@ -114,6 +132,7 @@ export class FormDetector {
     this.clickRecords = [];
     this.keyRecords = [];
     this.lastResult = null;
+    this.resetActionClickState();
   }
 
   // ========== DOM 解析 ==========
@@ -346,7 +365,57 @@ export class FormDetector {
     this.lastMouseMove = { x: me.clientX, y: me.clientY, t: performance.now() };
   };
 
-  private handleAction = (): void => {
+  private handleAction = (e: Event): void => {
+    this.resetActionClickState();
+
+    const me = e as MouseEvent;
+    const target = e.target as Element;
+    const rect = target.getBoundingClientRect();
+
+    const hadMove = this.lastMouseMove !== null &&
+      Math.abs(this.lastMouseMove.x - me.clientX) < 50 &&
+      Math.abs(this.lastMouseMove.y - me.clientY) < 50 &&
+      (performance.now() - this.lastMouseMove.t) < 200;
+
+    const record: ClickRecord = {
+      x: me.clientX,
+      y: me.clientY,
+      t: Date.now(),
+      isTrusted: me.isTrusted,
+      offsetX: me.offsetX,
+      offsetY: me.offsetY,
+      pageX: me.pageX,
+      pageY: me.pageY,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+      target: (target as HTMLElement).tagName,
+      hadPrecedingMove: hadMove,
+    };
+
+    this.clickRecords.push(record);
+    if (this.clickRecords.length > 100) {
+      this.clickRecords.splice(0, this.clickRecords.length - 100);
+    }
+
+    this.actionClickState.count++;
+
+    if (!hadMove && !me.isTrusted) this.actionClickState.noPrecedingMove++;
+    if (me.clientX === 0 && me.clientY === 0 && !me.isTrusted) this.actionClickState.zeroCoord = true;
+
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = Math.abs(me.clientX - cx);
+    const dy = Math.abs(me.clientY - cy);
+
+    if (dx <= 3 && dy <= 3) this.actionClickState.centered = true;
+
+    const cornerThreshold = 3;
+    const nearTL = me.clientX <= rect.left + cornerThreshold && me.clientY <= rect.top + cornerThreshold;
+    const nearTR = me.clientX >= rect.right - cornerThreshold && me.clientY <= rect.top + cornerThreshold;
+    const nearBL = me.clientX <= rect.left + cornerThreshold && me.clientY >= rect.bottom - cornerThreshold;
+    const nearBR = me.clientX >= rect.right - cornerThreshold && me.clientY >= rect.bottom - cornerThreshold;
+    if (nearTL || nearTR || nearBL || nearBR) this.actionClickState.corner = true;
+
     this.scheduleAnalyze();
   };
 
@@ -447,35 +516,46 @@ export class FormDetector {
     }
 
     // 2. 点击在正中/四角比例过高
-    let centerOrCornerClicks = 0;
-    let totalClicks = 0;
-    for (const [, state] of this.fieldStates) {
-      if (state.clickCount > 0) {
-        totalClicks += state.clickCount;
-        if (state.clickCentered || state.clickCorner) centerOrCornerClicks += state.clickCount;
+    if (this.isActionClickSuspicious()) {
+      let centerOrCornerClicks = 0;
+      let totalClicks = 0;
+      if (this.actionClickState.count > 0) {
+        totalClicks += this.actionClickState.count;
+        if (this.actionClickState.centered || this.actionClickState.corner) {
+          centerOrCornerClicks += this.actionClickState.count;
+        }
       }
-    }
-    if (totalClicks >= 2 && centerOrCornerClicks / totalClicks > 2 / 3) {
-      this._scbCodes.push(ScbCodes.CENTER_CORNER_CLICK);
-      checks.push(true);
+      for (const [, state] of this.fieldStates) {
+        if (state.clickCount > 0) {
+          totalClicks += state.clickCount;
+          if (state.clickCentered || state.clickCorner) centerOrCornerClicks += state.clickCount;
+        }
+      }
+      if (totalClicks >= 2 && centerOrCornerClicks / totalClicks > 2 / 3) {
+        this._scbCodes.push(ScbCodes.CENTER_CORNER_CLICK);
+        checks.push(true);
+      }
     }
 
     // 3. 不同元素的点击偏移一致
-    const offsetKeys = new Set<string>();
-    for (const [, state] of this.fieldStates) {
-      if (state.clickOffsetKey) offsetKeys.add(state.clickOffsetKey);
-    }
-    if (offsetKeys.size === 1 && totalClicks >= 2 && this.fieldStates.size >= 2) {
-      this._scbCodes.push(ScbCodes.SAME_CLICK_OFFSET);
-      checks.push(true);
+    if (this.isActionClickSuspicious()) {
+      const offsetKeys = new Set<string>();
+      for (const [, state] of this.fieldStates) {
+        if (state.clickOffsetKey) offsetKeys.add(state.clickOffsetKey);
+      }
+      if (offsetKeys.size === 1 && this.fieldStates.size >= 2) {
+        this._scbCodes.push(ScbCodes.SAME_CLICK_OFFSET);
+        checks.push(true);
+      }
     }
 
     // 4. 点击前无鼠标移动
-    const noPrecedingMove = this.clickRecords.filter(r => !r.hadPrecedingMove && !r.isTrusted).length;
-    const trustedClicks = this.clickRecords.filter(r => r.isTrusted).length;
-    if (this.clickRecords.length >= 3 && noPrecedingMove / this.clickRecords.length > 0.5) {
-      this._scbCodes.push(ScbCodes.NO_MOUSE_BEFORE_CLICK);
-      checks.push(true);
+    if (this.isActionClickSuspicious()) {
+      const noPrecedingMove = this.clickRecords.filter(r => !r.hadPrecedingMove && !r.isTrusted).length;
+      if (this.clickRecords.length >= 3 && noPrecedingMove / this.clickRecords.length > 0.5) {
+        this._scbCodes.push(ScbCodes.NO_MOUSE_BEFORE_CLICK);
+        checks.push(true);
+      }
     }
 
     // 5. 多字段无 Tab 且无鼠标点击切换（仅非可信 input 视为可疑）
@@ -510,9 +590,12 @@ export class FormDetector {
     }
 
     // 附加：isTrusted: false 事件
-    if (trustedClicks === 0 && this.clickRecords.length >= 2) {
-      this._scbCodes.push(ScbCodes.UNTRUSTED_EVENTS);
-      checks.push(true);
+    if (this.isActionClickSuspicious()) {
+      const trustedClicks = this.clickRecords.filter(r => r.isTrusted).length;
+      if (trustedClicks === 0 && this.clickRecords.length >= 2) {
+        this._scbCodes.push(ScbCodes.UNTRUSTED_EVENTS);
+        checks.push(true);
+      }
     }
 
     return checks.length >= 2;
@@ -583,6 +666,8 @@ export class FormDetector {
   private analyzeCDPMouseLeak(): boolean {
     this._cdpCodes = [];
     if (this.clickRecords.length === 0) return false;
+    if (!this.isActionClickSuspicious()) return false;
+
     const checks: boolean[] = [];
 
     // 1. 零坐标点击
