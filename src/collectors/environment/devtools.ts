@@ -1,10 +1,12 @@
 import { safeExec } from '../../utils/safe-exec';
+import { isNativeFn, isGetterTampered } from '../../utils/native-check';
 
 const SCOPE = 'devtools';
 
 export interface DevtoolsResult {
   is_open: boolean;
   is_cdp: boolean;
+  is_tampered: boolean;
   signals: string[];
 }
 
@@ -50,12 +52,35 @@ export function detectDevtools(): DevtoolsResult {
     if (triggered) signals.push('cdp_runtime');
   }, undefined, SCOPE);
 
-  const hasSizeDiff = signals.includes('size_diff');
-  const hasCdp = signals.includes('cdp_runtime');
+  safeExec(() => {
+    if (isGetterTampered(window, 'outerWidth') || isGetterTampered(window, 'outerHeight')) {
+      signals.push('prop_descriptor_tampered');
+    }
+    if (isGetterTampered(navigator, 'webdriver')) {
+      signals.push('prop_descriptor_tampered');
+    }
+  }, undefined, SCOPE);
+
+  safeExec(() => {
+    if (!isNativeFn(console.debug)) signals.push('console_tampered');
+  }, undefined, SCOPE);
+
+  safeExec(() => {
+    if (!isNativeFn(Function.prototype.toString)) signals.push('tostring_tampered');
+  }, undefined, SCOPE);
+
+  const dedupedSignals = [...new Set(signals)];
+
+  const hasSizeDiff = dedupedSignals.includes('size_diff');
+  const hasCdp = dedupedSignals.includes('cdp_runtime');
+  const hasTampered = dedupedSignals.includes('prop_descriptor_tampered')
+    || dedupedSignals.includes('console_tampered')
+    || dedupedSignals.includes('tostring_tampered');
 
   return {
-    is_open: hasSizeDiff || signals.includes('getter_trap'),
+    is_open: hasSizeDiff || dedupedSignals.includes('getter_trap'),
     is_cdp: hasCdp,
-    signals,
+    is_tampered: hasTampered,
+    signals: dedupedSignals,
   };
 }

@@ -161,13 +161,8 @@ export class BehaviorTrackSDK {
         is_selenium: false,
         is_nightmare: false,
         is_sequentum: false,
-        iframe_overridden: false,
-        iframe_webdriver: false,
-        worker_consistent: true,
-        worker_cdp: false,
         is_tampered: false,
         is_proxy: false,
-        ua_consistent: true,
         is_suspicious_form: false,
         is_form_super_human: false,
         is_form_cdp_mouse: false,
@@ -229,9 +224,7 @@ export class BehaviorTrackSDK {
       is_devtools_open: ri.is_devtools_open,
       is_webdriver: ri.is_webdriver,
       is_headless: ri.is_headless,
-      worker_cdp: ri.worker_cdp,
       is_tampered: ri.is_tampered,
-      ua_consistent: ri.ua_consistent,
     };
   }
 

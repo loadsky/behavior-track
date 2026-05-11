@@ -1,9 +1,10 @@
 import { safeExec } from '../../utils/safe-exec';
+import { isNativeFn } from '../../utils/native-check';
 
 const SCOPE = 'consistency';
 
 export interface ConsistencyResult {
-  ua_consistent: boolean;
+  is_mismatch: boolean;
   signals: string[];
 }
 
@@ -45,13 +46,13 @@ export function detectConsistency(): ConsistencyResult {
 
   safeExec(() => {
     const navProto = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');
-    if (navProto && navProto.get && !/\[native code\]/.test(navProto.get.toString())) {
+    if (navProto && navProto.get && !isNativeFn(navProto.get)) {
       signals.push('navigator_proxy');
     }
   }, undefined, SCOPE);
 
   return {
-    ua_consistent: signals.length === 0,
+    is_mismatch: signals.length > 0,
     signals,
   };
 }

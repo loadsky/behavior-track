@@ -23,11 +23,17 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
     ...worker.signals,
   ];
 
+  // webdriver 检测：主框架 + iframe 两层检测同一根因，只计一次
+  const hasWebdriver = automation.is_webdriver || iframe.is_webdriver;
+  // CDP 检测：三层（主框架/iframe/worker）检测同一根因，只计一次
+  const hasCdp = devtools.is_cdp || iframe.is_cdp || worker.is_cdp;
+
   // 自动化/机器人信号：递减权重避免简单叠加
   const autoSignals: { weight: number }[] = [];
-  if (automation.is_webdriver) autoSignals.push({ weight: 50 });
+  if (hasWebdriver) autoSignals.push({ weight: 50 });
   if (headless.is_headless) autoSignals.push({ weight: 50 });
-  if (devtools.is_cdp && !devtools.is_open) autoSignals.push({ weight: 50 });
+  if (devtools.is_tampered) autoSignals.push({ weight: 50 });
+  if (hasCdp && !devtools.is_open) autoSignals.push({ weight: 50 });
 
   // Selenium/Nightmare/Sequentum 来自 automation.signals
   const hasSelenium = automation.signals.includes('selenium_cdc') || automation.signals.includes('selenium_cdc_array');
@@ -36,9 +42,6 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
   if (hasSelenium) autoSignals.push({ weight: 50 });
   if (hasNightmare) autoSignals.push({ weight: 50 });
   if (hasSequentum) autoSignals.push({ weight: 50 });
-
-  // iframe 内 webdriver 也是强自动化信号
-  if (iframe.is_webdriver) autoSignals.push({ weight: 50 });
 
   autoSignals.sort((a, b) => b.weight - a.weight);
 
@@ -50,28 +53,23 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
   else if (autoSignals.length >= 2) riskScore += 10;
 
   if (devtools.is_open) riskScore += 10;
-  if (!consistency.ua_consistent) riskScore += 15;
+  if (iframe.is_tampered) riskScore += 10;
+  if (consistency.is_mismatch) riskScore += 15;
   if (iframe.is_overridden) riskScore += 15;
-  if (!worker.is_consistent) riskScore += 15;
-  if (worker.is_cdp) riskScore += 10;
+  if (worker.is_tampered) riskScore += 15;
 
   riskScore = Math.min(Math.round(riskScore), 100);
 
   return {
-    is_webdriver: automation.is_webdriver,
+    is_webdriver: hasWebdriver,
     is_headless: headless.is_headless,
     is_devtools_open: devtools.is_open,
-    is_cdp: devtools.is_cdp,
+    is_cdp: hasCdp,
     is_selenium: hasSelenium,
     is_nightmare: hasNightmare,
     is_sequentum: hasSequentum,
-    iframe_overridden: iframe.is_overridden,
-    iframe_webdriver: iframe.is_webdriver,
-    worker_consistent: worker.is_consistent,
-    worker_cdp: worker.is_cdp,
-    is_tampered: !consistency.ua_consistent || iframe.is_overridden || !worker.is_consistent,
+    is_tampered: consistency.is_mismatch || iframe.is_overridden || worker.is_tampered || devtools.is_tampered || iframe.is_tampered,
     is_proxy: false,
-    ua_consistent: consistency.ua_consistent,
     is_suspicious_form: false,
     is_form_super_human: false,
     is_form_cdp_mouse: false,

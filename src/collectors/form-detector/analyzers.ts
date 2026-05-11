@@ -287,8 +287,6 @@ export function collectEnvIssues(envRisk: EnvRiskSnapshot | null): IssueCode[] {
   if (envRisk.is_devtools_open) issues.push(EnvCodes.ENV_DEVTOOLS_OPEN);
   if (envRisk.is_webdriver) issues.push(EnvCodes.ENV_WEBDRIVER);
   if (envRisk.is_headless) issues.push(EnvCodes.ENV_HEADLESS);
-  if (envRisk.worker_cdp) issues.push(EnvCodes.ENV_WORKER_CDP);
   if (envRisk.is_tampered) issues.push(EnvCodes.ENV_TAMPERED);
-  if (!envRisk.ua_consistent) issues.push(EnvCodes.ENV_UA_INCONSISTENT);
   return issues;
 }

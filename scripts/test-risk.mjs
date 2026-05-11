@@ -45,13 +45,8 @@ async function collectRiskInfo(page) {
       is_devtools_open: env.risk_indicators.is_devtools_open,
       is_cdp: env.risk_indicators.is_cdp,
       is_selenium: env.risk_indicators.is_selenium,
-      iframe_overridden: env.risk_indicators.iframe_overridden,
-      iframe_webdriver: env.risk_indicators.iframe_webdriver,
-      worker_consistent: env.risk_indicators.worker_consistent,
-      worker_cdp: env.risk_indicators.worker_cdp,
       is_tampered: env.risk_indicators.is_tampered,
       is_proxy: env.risk_indicators.is_proxy,
-      ua_consistent: env.risk_indicators.ua_consistent,
       is_suspicious_form: env.risk_indicators.is_suspicious_form,
       is_form_super_human: env.risk_indicators.is_form_super_human,
       is_form_cdp_mouse: env.risk_indicators.is_form_cdp_mouse,
@@ -256,13 +251,8 @@ function printResult(r) {
   console.log('  is_devtools_open  :', r.is_devtools_open);
   console.log('  is_cdp            :', r.is_cdp);
   console.log('  is_selenium       :', r.is_selenium);
-  console.log('  iframe_overridden :', r.iframe_overridden);
-  console.log('  iframe_webdriver  :', r.iframe_webdriver);
-  console.log('  worker_consistent :', r.worker_consistent);
-  console.log('  worker_cdp        :', r.worker_cdp);
   console.log('  is_tampered       :', r.is_tampered);
   console.log('  is_proxy          :', r.is_proxy);
-  console.log('  ua_consistent     :', r.ua_consistent);
   console.log('  is_suspicious_form:', r.is_suspicious_form);
   console.log('  is_form_super_human:', r.is_form_super_human);
   console.log('  is_form_cdp_mouse :', r.is_form_cdp_mouse);

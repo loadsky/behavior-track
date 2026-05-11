@@ -33,9 +33,7 @@ export const EnvCodes = {
   ENV_DEVTOOLS_OPEN: 'env_devtools_open',
   ENV_WEBDRIVER: 'env_webdriver',
   ENV_HEADLESS: 'env_headless',
-  ENV_WORKER_CDP: 'env_worker_cdp',
   ENV_TAMPERED: 'env_tampered',
-  ENV_UA_INCONSISTENT: 'env_ua_inconsistent',
 } as const;
 
 export type IssueCode =
@@ -52,9 +50,7 @@ export interface EnvRiskSnapshot {
   is_devtools_open: boolean;
   is_webdriver: boolean;
   is_headless: boolean;
-  worker_cdp: boolean;
   is_tampered: boolean;
-  ua_consistent: boolean;
 }
 
 // ====== 公共类型 ======

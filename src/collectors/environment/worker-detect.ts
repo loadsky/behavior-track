@@ -3,7 +3,7 @@ import { safeExec } from '../../utils/safe-exec';
 const SCOPE = 'worker_detect';
 
 export interface WorkerResult {
-  is_consistent: boolean;
+  is_tampered: boolean;
   is_cdp: boolean;
   signals: string[];
 }
@@ -12,7 +12,7 @@ export function detectWorkerConsistency(): Promise<WorkerResult> {
   return new Promise((resolve) => {
     const done = (result: WorkerResult) => resolve(result);
     const timeout = setTimeout(() => {
-      done({ is_consistent: true, is_cdp: false, signals: [] });
+      done({ is_tampered: false, is_cdp: false, signals: [] });
     }, 5000);
 
     safeExec(() => {
@@ -54,10 +54,10 @@ export function detectWorkerConsistency(): Promise<WorkerResult> {
           if (JSON.stringify(navigator.languages) !== r.languages) signals.push('worker_languages_mismatch');
         } catch { /* ignore */ }
 
-        if (r.cdp) signals.push('worker_cdp');
+        if (r.cdp) signals.push('cdp_worker');
 
         done({
-          is_consistent: signals.length === 0 || (signals.length === 1 && signals[0] === 'worker_cdp'),
+          is_tampered: !(signals.length === 0 || (signals.length === 1 && signals[0] === 'cdp_worker')),
           is_cdp: r.cdp === true,
           signals,
         });
@@ -67,7 +67,7 @@ export function detectWorkerConsistency(): Promise<WorkerResult> {
 
       worker.onerror = () => {
         clearTimeout(timeout);
-        done({ is_consistent: true, is_cdp: false, signals: [] });
+        done({ is_tampered: false, is_cdp: false, signals: [] });
         worker.terminate();
       };
     }, undefined, SCOPE);

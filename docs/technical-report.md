@@ -149,10 +149,10 @@ SDK 对外仅暴露一个单例对象（`src/index.ts`）：
 | `iframe_overridden` | iframe 原型链被篡改 |
 | `iframe_webdriver` | iframe 内 `navigator.webdriver` 为真 |
 | `worker_consistent` | Worker 与主线程 navigator 字段一致 |
-| `worker_cdp` | Worker 内检测到 CDP |
+| `cdp_worker` | Worker 内检测到 CDP |
 | `is_tampered` | UA 不一致 / iframe 被改 / Worker 不一致的汇总 |
 | `is_proxy` | 预留，当前恒 false |
-| `ua_consistent` | UA ↔ platform ↔ touch 一致 |
+| `is_mismatch` | UA ↔ platform ↔ touch 不一致 |
 | `is_suspicious_form` / `is_form_super_human` / `is_form_cdp_mouse` | 表单三大专项信号 |
 | `risk_score` | 0-100 综合分值 |
 | `signals` | 字符串数组，所有命中的子信号码 |
@@ -257,7 +257,7 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 | `ua_tampered` | `navigator.userAgent.toString()` 不含 `[native code]` 但含 `function`（被 Proxy 包装） |
 | `navigator_proxy` | `Navigator.prototype.userAgent` 的 getter `toString` 不是原生代码 |
 
-`ua_consistent = signals.length === 0`。
+`is_mismatch = signals.length > 0`。
 
 #### 3.4.5 `iframe.ts` — iframe 原型链篡改
 
@@ -277,9 +277,9 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 - `navigator.webdriver / userAgent / hardwareConcurrency / platform / languages`
 - Worker 内同样做 `Error.prepareStackTrace` 的 CDP 探测
 
-信号：`worker_webdriver_mismatch / worker_ua_mismatch / worker_hw_mismatch / worker_platform_mismatch / worker_languages_mismatch / worker_cdp`。
+信号：`worker_webdriver_mismatch / worker_ua_mismatch / worker_hw_mismatch / worker_platform_mismatch / worker_languages_mismatch / cdp_worker`。
 
-**设计亮点**：`is_consistent = signals.length === 0 || (length === 1 && signals[0] === 'worker_cdp')`——`worker_cdp` 独立上报但不计入"不一致"（CDP 不等于 navigator 被伪造）。5s 超时兜底，Worker 创建失败保守视为 consistent。
+**设计亮点**：`is_consistent = signals.length === 0 || (length === 1 && signals[0] === 'cdp_worker')`——`cdp_worker` 独立上报但不计入"不一致"（CDP 不等于 navigator 被伪造）。5s 超时兜底，Worker 创建失败保守视为 consistent。
 
 #### 3.4.7 聚合与 `risk_score` 计算（`environment/index.ts`）
 
@@ -294,7 +294,7 @@ score = Σ weight[i] * 0.5^i
 
 第 1 条 50，第 2 条 25，第 3 条 12.5...；根据命中数量加 bonus：≥2 条 +10，≥3 条 +20。
 
-再叠加弱信号：`devtools.is_open +10` / `!ua_consistent +15` / `iframe.is_overridden +15` / `!worker.is_consistent +15` / `worker.is_cdp +10`。
+再叠加弱信号：`devtools.is_open +10` / `is_mismatch +15` / `iframe.is_overridden +15` / `!worker.is_consistent +15` / `worker.is_cdp +10`。
 
 最终 `risk_score = min(round(score), 100)`。
 
@@ -620,10 +620,10 @@ score += (len>=3 ? 20 : len>=2 ? 10 : 0)
 
 // 弱信号线性叠加
 score += devtools_open ? 10 : 0
-score += !ua_consistent ? 15 : 0
+score += is_mismatch ? 15 : 0
 score += iframe_overridden ? 15 : 0
 score += !worker_consistent ? 15 : 0
-score += worker_cdp ? 10 : 0
+score += cdp_worker ? 10 : 0
 
 risk_score = min(round(score), 100)
 ```

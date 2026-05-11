@@ -6,13 +6,8 @@ export interface RiskIndicators {
   is_selenium: boolean;
   is_nightmare: boolean;
   is_sequentum: boolean;
-  iframe_overridden: boolean;
-  iframe_webdriver: boolean;
-  worker_consistent: boolean;
-  worker_cdp: boolean;
   is_tampered: boolean;
   is_proxy: boolean;
-  ua_consistent: boolean;
   is_suspicious_form: boolean;
   is_form_super_human: boolean;
   is_form_cdp_mouse: boolean;

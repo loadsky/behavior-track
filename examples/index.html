@@ -212,14 +212,6 @@
                     :class="env.risk_indicators[label.key] ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
                     {{ label.text }}: {{ env.risk_indicators[label.key] ? '是' : '否' }}
                   </span>
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
-                    :class="env.risk_indicators.ua_consistent ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
-                    UA一致: {{ env.risk_indicators.ua_consistent ? '是' : '否' }}
-                  </span>
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
-                    :class="env.risk_indicators.worker_consistent ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
-                    Worker一致: {{ env.risk_indicators.worker_consistent ? '是' : '否' }}
-                  </span>
                 </div>
                 <div v-if="env.risk_indicators.signals.length" class="flex flex-wrap gap-1.5">
                   <span v-for="s in env.risk_indicators.signals" :key="s"
@@ -496,9 +488,6 @@
             { key: 'is_selenium', text: 'Selenium' },
             { key: 'is_nightmare', text: 'Nightmare' },
             { key: 'is_sequentum', text: 'Sequentum' },
-            { key: 'iframe_overridden', text: 'iframe覆写' },
-            { key: 'iframe_webdriver', text: 'iframe WebDriver' },
-            { key: 'worker_cdp', text: 'Worker CDP' },
             { key: 'is_tampered', text: '已篡改' },
             { key: 'is_proxy', text: '代理' },
           ],
@@ -588,7 +577,6 @@
               env_devtools_open: '环境检测到DevTools已打开',
               env_webdriver: '环境检测到WebDriver特征',
               env_headless: '环境检测到Headless模式',
-              env_worker_cdp: '环境检测到Worker CDP',
               env_tampered: '环境检测到篡改痕迹',
               env_ua_inconsistent: '环境检测到UA不一致',
             };
