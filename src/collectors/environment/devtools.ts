@@ -21,7 +21,7 @@ export function detectDevtools(): DevtoolsResult {
     if (ow < 50 || oh < 50) return;
     const rw = iw / ow;
     const rh = ih / oh;
-    if (rw < 0.88 || rh < 0.88) {
+    if (rw < 0.88 || rh < 0.75) {
       signals.push('size_diff');
     }
   }, undefined, SCOPE);
