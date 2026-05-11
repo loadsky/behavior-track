@@ -128,3 +128,16 @@ export interface TypingCadence {
   untrustedKeys: number;
   orphanKeydowns: number;
 }
+
+export interface AnalyzerResult {
+  triggered: boolean;
+  codes: IssueCode[];
+}
+
+export interface ActionClickState {
+  count: number;
+  centered: boolean;
+  corner: boolean;
+  noPrecedingMove: number;
+  zeroCoord: boolean;
+}
