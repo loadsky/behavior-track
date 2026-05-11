@@ -28,9 +28,7 @@ export declare const EnvCodes: {
     readonly ENV_DEVTOOLS_OPEN: "env_devtools_open";
     readonly ENV_WEBDRIVER: "env_webdriver";
     readonly ENV_HEADLESS: "env_headless";
-    readonly ENV_WORKER_CDP: "env_worker_cdp";
     readonly ENV_TAMPERED: "env_tampered";
-    readonly ENV_UA_INCONSISTENT: "env_ua_inconsistent";
 };
 export type IssueCode = (typeof ScbCodes)[keyof typeof ScbCodes] | (typeof ShsCodes)[keyof typeof ShsCodes] | (typeof CdpCodes)[keyof typeof CdpCodes] | (typeof EnvCodes)[keyof typeof EnvCodes];
 /** 传递给表单检测器的环境风险快照 */
@@ -41,9 +39,7 @@ export interface EnvRiskSnapshot {
     is_devtools_open: boolean;
     is_webdriver: boolean;
     is_headless: boolean;
-    worker_cdp: boolean;
     is_tampered: boolean;
-    ua_consistent: boolean;
 }
 export interface FormDetectConfig {
     containerSelector: string;
@@ -107,4 +103,15 @@ export interface TypingCadence {
     totalKeys: number;
     untrustedKeys: number;
     orphanKeydowns: number;
+}
+export interface AnalyzerResult {
+    triggered: boolean;
+    codes: IssueCode[];
+}
+export interface ActionClickState {
+    count: number;
+    centered: boolean;
+    corner: boolean;
+    noPrecedingMove: number;
+    zeroCoord: boolean;
 }

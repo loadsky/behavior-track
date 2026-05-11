@@ -1,5 +1,5 @@
 export interface ConsistencyResult {
-    ua_consistent: boolean;
+    is_mismatch: boolean;
     signals: string[];
 }
 export declare function detectConsistency(): ConsistencyResult;

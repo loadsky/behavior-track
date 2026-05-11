@@ -1,27 +1,18 @@
-import type { FormDetectConfig } from './types';
-import type { EnvRiskSnapshot } from './types';
+import type { FormDetectConfig, EnvRiskSnapshot } from './types';
+/**
+ * 表单行为检测器：监听表单内的用户交互行为，通过多维度信号分析判断是否为自动化操作。
+ * 检测维度：可疑客户端行为(SCB)、超人类速度(SHS)、CDP 鼠标指纹(CDP)、环境风险(ENV)。
+ */
 export declare class FormDetector {
     private config;
     private container;
     private actionEl;
     private destroyed;
-    private fieldStates;
-    private clickRecords;
-    private keyRecords;
-    private lastMouseMove;
-    private composing;
-    private firstInputTime;
-    private lastInputTime;
+    private collector;
     private lastResult;
     private analyzeScheduled;
-    private boundHandlers;
-    private containerObserver;
     private unsubscribeDoc;
     private envRisk;
-    private actionClickState;
-    /** action 按钮有点击且存在至少一种可疑模式时，允许所有点击检测项进入分析 */
-    private isActionClickSuspicious;
-    private resetActionClickState;
     constructor(config: FormDetectConfig);
     setEnvRisk(snapshot: EnvRiskSnapshot): void;
     getSignals(): {
@@ -32,31 +23,7 @@ export declare class FormDetector {
     };
     destroy(): void;
     private resolveAndBind;
-    private bindContainer;
     private observeDocument;
-    private scanFields;
-    private on;
-    private detachAll;
-    private handleFieldClick;
-    private handleFieldInput;
-    private handleFieldKeydown;
-    private handleCompositionStart;
-    private handleCompositionEnd;
-    private handleFieldPaste;
-    private handleGlobalKeydown;
-    private handleGlobalKeyup;
-    private handleGlobalMouseMove;
-    private handleAction;
-    private handleEnterSubmit;
     private scheduleAnalyze;
     private analyze;
-    private _scbCodes;
-    private analyzeSuspiciousBehavior;
-    private _shsCodes;
-    private analyzeSuperHumanSpeed;
-    private _cdpCodes;
-    private analyzeCDPMouseLeak;
-    private buildTypingCadence;
-    private collectIssues;
-    private collectEnvIssues;
 }

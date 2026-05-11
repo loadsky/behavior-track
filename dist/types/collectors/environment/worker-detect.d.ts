@@ -1,5 +1,5 @@
 export interface WorkerResult {
-    is_consistent: boolean;
+    is_tampered: boolean;
     is_cdp: boolean;
     signals: string[];
 }
