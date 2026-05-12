@@ -46,6 +46,7 @@ export interface FormDetectConfig {
     actionSelector: string;
     onResult: (result: FormDetectionResult) => void;
     envRisk?: EnvRiskSnapshot;
+    disableSignals?: Array<keyof FormSignalResults>;
 }
 export interface FormDetectionResult {
     is_pass: boolean;
@@ -55,9 +56,9 @@ export interface FormDetectionResult {
     timestamp: number;
 }
 export interface FormSignalResults {
-    suspicious_client_side_behavior: boolean;
-    super_human_speed: boolean;
-    has_cdp_mouse_leak: boolean;
+    is_suspicious_client: boolean;
+    is_super_speed: boolean;
+    is_mouse_leak: boolean;
 }
 export interface FieldState {
     fieldName: string;

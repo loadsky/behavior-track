@@ -8,9 +8,9 @@ export interface RiskIndicators {
     is_sequentum: boolean;
     is_tampered: boolean;
     is_proxy: boolean;
-    is_suspicious_form: boolean;
-    is_form_super_human: boolean;
-    is_form_cdp_mouse: boolean;
+    is_suspicious_client: boolean;
+    is_super_speed: boolean;
+    is_mouse_leak: boolean;
     risk_score: number;
     signals: string[];
 }
