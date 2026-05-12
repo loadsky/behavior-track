@@ -40,18 +40,7 @@ async function collectRiskInfo(page) {
 
     const env = await bt.getEnvInfo();
     return {
-      is_webdriver: env.risk_indicators.is_webdriver,
-      is_headless: env.risk_indicators.is_headless,
-      is_devtools_open: env.risk_indicators.is_devtools_open,
-      is_cdp: env.risk_indicators.is_cdp,
-      is_selenium: env.risk_indicators.is_selenium,
-      is_tampered: env.risk_indicators.is_tampered,
-      is_proxy: env.risk_indicators.is_proxy,
-      is_suspicious_client: env.risk_indicators.is_suspicious_client,
-      is_super_speed: env.risk_indicators.is_super_speed,
-      is_mouse_leak: env.risk_indicators.is_mouse_leak,
-      risk_score: env.risk_indicators.risk_score,
-      signals: env.risk_indicators.signals,
+      ...env.risk_indicators,
       browser: env.browser,
       browser_version: env.browser_version,
       fingerprint: env.fingerprint,
@@ -84,9 +73,9 @@ async function simulateFormSubmit(page) {
     console.log('    risk_score     :', formResult.risk_score, '/ 100');
     console.log('    issues         :', formResult.issues.length > 0 ? formResult.issues.join(', ') : '(无)');
     console.log('    signals:');
-    console.log('      is_suspicious_client:', formResult.signals.is_suspicious_client);
-    console.log('      is_super_speed              :', formResult.signals.is_super_speed);
-    console.log('      is_mouse_leak             :', formResult.signals.is_mouse_leak);
+    for (const [k, v] of Object.entries(formResult.signals)) {
+      console.log(`      ${k.padEnd(22)}:`, v);
+    }
   } else {
     console.log('  表单检测结果: (未获取到)');
   }
@@ -120,9 +109,9 @@ async function simulateFormSubmitCDP(page) {
     console.log('    risk_score     :', formResult.risk_score, '/ 100');
     console.log('    issues         :', formResult.issues.length > 0 ? formResult.issues.join(', ') : '(无)');
     console.log('    signals:');
-    console.log('      is_suspicious_client:', formResult.signals.is_suspicious_client);
-    console.log('      is_super_speed              :', formResult.signals.is_super_speed);
-    console.log('      is_mouse_leak             :', formResult.signals.is_mouse_leak);
+    for (const [k, v] of Object.entries(formResult.signals)) {
+      console.log(`      ${k.padEnd(22)}:`, v);
+    }
   } else {
     console.log('  表单检测结果: (未获取到)');
   }
@@ -246,15 +235,8 @@ function printResult(r) {
   console.log('  webrtc_ips        :', r.webrtc_ips);
   console.log('  ─────────────────────────────');
   console.log('  risk_score        :', r.risk_score, '/ 100');
-  console.log('  is_webdriver      :', r.is_webdriver);
-  console.log('  is_headless       :', r.is_headless);
-  console.log('  is_devtools_open  :', r.is_devtools_open);
-  console.log('  is_cdp            :', r.is_cdp);
-  console.log('  is_selenium       :', r.is_selenium);
-  console.log('  is_tampered       :', r.is_tampered);
-  console.log('  is_proxy          :', r.is_proxy);
-  console.log('  is_suspicious_client:', r.is_suspicious_client);
-  console.log('  is_super_speed:', r.is_super_speed);
-  console.log('  is_mouse_leak :', r.is_mouse_leak);
+  for (const [k, v] of Object.entries(r)) {
+    if (k.startsWith('is_')) console.log(`  ${k.padEnd(22)}:`, v);
+  }
   console.log('  signals           :', r.signals.length > 0 ? r.signals.join(', ') : '(无)');
 }
