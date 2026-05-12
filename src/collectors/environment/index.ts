@@ -70,9 +70,9 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
     is_sequentum: hasSequentum,
     is_tampered: consistency.is_mismatch || iframe.is_overridden || worker.is_tampered || devtools.is_tampered || iframe.is_tampered,
     is_proxy: false,
-    is_suspicious_form: false,
-    is_form_super_human: false,
-    is_form_cdp_mouse: false,
+    is_suspicious_client: false,
+    is_super_speed: false,
+    is_mouse_leak: false,
     risk_score: riskScore,
     signals: allSignals,
   };

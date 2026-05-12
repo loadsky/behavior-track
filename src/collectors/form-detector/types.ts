@@ -71,9 +71,9 @@ export interface FormDetectionResult {
 }
 
 export interface FormSignalResults {
-  suspicious_client_side_behavior: boolean;
-  super_human_speed: boolean;
-  has_cdp_mouse_leak: boolean;
+  is_suspicious_client: boolean;
+  is_super_speed: boolean;
+  is_mouse_leak: boolean;
 }
 
 export interface FieldState {

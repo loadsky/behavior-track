@@ -298,15 +298,15 @@
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
                   <span class="text-gray-500">可疑行为</span>
-                  <span class="font-mono" :class="formResult.signals.suspicious_client_side_behavior ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.suspicious_client_side_behavior ? '检测到' : '无' }}</span>
+                  <span class="font-mono" :class="formResult.signals.is_suspicious_client ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.is_suspicious_client ? '检测到' : '无' }}</span>
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
                   <span class="text-gray-500">超人类速度</span>
-                  <span class="font-mono" :class="formResult.signals.super_human_speed ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.super_human_speed ? '检测到' : '无' }}</span>
+                  <span class="font-mono" :class="formResult.signals.is_super_speed ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.is_super_speed ? '检测到' : '无' }}</span>
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
                   <span class="text-gray-500">CDP 鼠标泄露</span>
-                  <span class="font-mono" :class="formResult.signals.has_cdp_mouse_leak ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.has_cdp_mouse_leak ? '检测到' : '无' }}</span>
+                  <span class="font-mono" :class="formResult.signals.is_mouse_leak ? 'text-red-600' : 'text-green-600'">{{ formResult.signals.is_mouse_leak ? '检测到' : '无' }}</span>
                 </div>
                 <div class="flex justify-between bg-gray-50 rounded px-3 py-2">
                   <span class="text-gray-500">时间戳</span>

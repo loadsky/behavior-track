@@ -6,6 +6,7 @@ import type { CollectedData } from './analyzers';
 // 防止长时间运行导致内存增长的记录上限
 const MAX_CLICK_RECORDS = 100;
 const MAX_KEY_RECORDS = 300;
+const ACTION_CLICK_DEFAULTS: ActionClickState = { count: 0, centered: false, corner: false, noPrecedingMove: 0, zeroCoord: false };
 
 /**
  * 事件收集器：绑定容器内所有表单事件和全局事件，积累原始交互数据。
@@ -22,7 +23,7 @@ export class EventCollector {
   private firstInputTime = 0;
   private lastInputTime = 0;
 
-  private actionClickState: ActionClickState = { count: 0, centered: false, corner: false, noPrecedingMove: 0, zeroCoord: false };
+  private actionClickState: ActionClickState = { ...ACTION_CLICK_DEFAULTS };
 
   private boundHandlers: Array<{
     target: EventTarget;
@@ -131,7 +132,7 @@ export class EventCollector {
   }
 
   private resetActionClickState(): void {
-    this.actionClickState = { count: 0, centered: false, corner: false, noPrecedingMove: 0, zeroCoord: false };
+    this.actionClickState = { ...ACTION_CLICK_DEFAULTS };
   }
 
   // 注册事件监听并记录引用，destroy 时统一移除

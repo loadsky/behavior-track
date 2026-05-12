@@ -163,9 +163,9 @@ export class BehaviorTrackSDK {
         is_sequentum: false,
         is_tampered: false,
         is_proxy: false,
-        is_suspicious_form: false,
-        is_form_super_human: false,
-        is_form_cdp_mouse: false,
+        is_suspicious_client: false,
+        is_super_speed: false,
+        is_mouse_leak: false,
         risk_score: 0,
         signals: [],
       },
@@ -189,15 +189,15 @@ export class BehaviorTrackSDK {
 
     for (const fd of this.formDetectors) {
       const sigs = fd.getSignals();
-      if (sigs.is_suspicious_form) formSuspicious = true;
-      if (sigs.is_form_super_human) formSuperHuman = true;
-      if (sigs.is_form_cdp_mouse) formCDPMouse = true;
+      if (sigs.is_suspicious_client) formSuspicious = true;
+      if (sigs.is_super_speed) formSuperHuman = true;
+      if (sigs.is_mouse_leak) formCDPMouse = true;
       formSignalStrings.push(...sigs.signalStrings);
     }
 
-    ri.is_suspicious_form = formSuspicious;
-    ri.is_form_super_human = formSuperHuman;
-    ri.is_form_cdp_mouse = formCDPMouse;
+    ri.is_suspicious_client = formSuspicious;
+    ri.is_super_speed = formSuperHuman;
+    ri.is_mouse_leak = formCDPMouse;
     ri.signals = [...ri.signals, ...formSignalStrings];
     ri.risk_score = this.computeUpdatedRiskScore(ri.risk_score, formSuspicious, formSuperHuman, formCDPMouse);
 

@@ -47,9 +47,9 @@ async function collectRiskInfo(page) {
       is_selenium: env.risk_indicators.is_selenium,
       is_tampered: env.risk_indicators.is_tampered,
       is_proxy: env.risk_indicators.is_proxy,
-      is_suspicious_form: env.risk_indicators.is_suspicious_form,
-      is_form_super_human: env.risk_indicators.is_form_super_human,
-      is_form_cdp_mouse: env.risk_indicators.is_form_cdp_mouse,
+      is_suspicious_client: env.risk_indicators.is_suspicious_client,
+      is_super_speed: env.risk_indicators.is_super_speed,
+      is_mouse_leak: env.risk_indicators.is_mouse_leak,
       risk_score: env.risk_indicators.risk_score,
       signals: env.risk_indicators.signals,
       browser: env.browser,
@@ -84,9 +84,9 @@ async function simulateFormSubmit(page) {
     console.log('    risk_score     :', formResult.risk_score, '/ 100');
     console.log('    issues         :', formResult.issues.length > 0 ? formResult.issues.join(', ') : '(无)');
     console.log('    signals:');
-    console.log('      suspicious_client_side_behavior:', formResult.signals.suspicious_client_side_behavior);
-    console.log('      super_human_speed              :', formResult.signals.super_human_speed);
-    console.log('      has_cdp_mouse_leak             :', formResult.signals.has_cdp_mouse_leak);
+    console.log('      is_suspicious_client:', formResult.signals.is_suspicious_client);
+    console.log('      is_super_speed              :', formResult.signals.is_super_speed);
+    console.log('      is_mouse_leak             :', formResult.signals.is_mouse_leak);
   } else {
     console.log('  表单检测结果: (未获取到)');
   }
@@ -120,9 +120,9 @@ async function simulateFormSubmitCDP(page) {
     console.log('    risk_score     :', formResult.risk_score, '/ 100');
     console.log('    issues         :', formResult.issues.length > 0 ? formResult.issues.join(', ') : '(无)');
     console.log('    signals:');
-    console.log('      suspicious_client_side_behavior:', formResult.signals.suspicious_client_side_behavior);
-    console.log('      super_human_speed              :', formResult.signals.super_human_speed);
-    console.log('      has_cdp_mouse_leak             :', formResult.signals.has_cdp_mouse_leak);
+    console.log('      is_suspicious_client:', formResult.signals.is_suspicious_client);
+    console.log('      is_super_speed              :', formResult.signals.is_super_speed);
+    console.log('      is_mouse_leak             :', formResult.signals.is_mouse_leak);
   } else {
     console.log('  表单检测结果: (未获取到)');
   }
@@ -253,8 +253,8 @@ function printResult(r) {
   console.log('  is_selenium       :', r.is_selenium);
   console.log('  is_tampered       :', r.is_tampered);
   console.log('  is_proxy          :', r.is_proxy);
-  console.log('  is_suspicious_form:', r.is_suspicious_form);
-  console.log('  is_form_super_human:', r.is_form_super_human);
-  console.log('  is_form_cdp_mouse :', r.is_form_cdp_mouse);
+  console.log('  is_suspicious_client:', r.is_suspicious_client);
+  console.log('  is_super_speed:', r.is_super_speed);
+  console.log('  is_mouse_leak :', r.is_mouse_leak);
   console.log('  signals           :', r.signals.length > 0 ? r.signals.join(', ') : '(无)');
 }

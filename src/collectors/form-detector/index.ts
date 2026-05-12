@@ -1,4 +1,4 @@
-import type { FormDetectConfig, FormDetectionResult, EnvRiskSnapshot } from './types';
+import type { FormDetectConfig, FormDetectionResult, FormSignalResults, EnvRiskSnapshot } from './types';
 import { subscribeDocObserver } from './doc-observer';
 import { EventCollector } from './event-collector';
 import { analyzeSuspiciousBehavior, analyzeSuperHumanSpeed, analyzeCDPMouseLeak, collectEnvIssues } from './analyzers';
@@ -38,26 +38,13 @@ export class FormDetector {
   }
 
   // 获取当前检测信号摘要，供外部消费
-  getSignals(): {
-    is_suspicious_form: boolean;
-    is_form_super_human: boolean;
-    is_form_cdp_mouse: boolean;
-    signalStrings: string[];
-  } {
-    if (!this.lastResult) {
-      return { is_suspicious_form: false, is_form_super_human: false, is_form_cdp_mouse: false, signalStrings: [] };
-    }
-    const s = this.lastResult.signals;
-    const strs: string[] = [];
-    if (s.suspicious_client_side_behavior) strs.push('form:suspicious_behavior');
-    if (s.super_human_speed) strs.push('form:super_human_speed');
-    if (s.has_cdp_mouse_leak) strs.push('form:cdp_mouse_leak');
-    return {
-      is_suspicious_form: s.suspicious_client_side_behavior,
-      is_form_super_human: s.super_human_speed,
-      is_form_cdp_mouse: s.has_cdp_mouse_leak,
-      signalStrings: strs,
-    };
+  getSignals(): FormSignalResults & { signalStrings: string[] } {
+    const defaults: FormSignalResults = { is_suspicious_client: false, is_super_speed: false, is_mouse_leak: false };
+    const signals = this.lastResult?.signals ?? defaults;
+    const signalStrings = (Object.keys(signals) as Array<keyof FormSignalResults & string>)
+      .filter(k => signals[k])
+      .map(k => `form:${k}`);
+    return { ...signals, signalStrings };
   }
 
   // 销毁实例，移除所有事件监听和 observer
@@ -148,9 +135,9 @@ export class FormDetector {
       is_pass: riskScore < 40,
       risk_score: riskScore,
       signals: {
-        suspicious_client_side_behavior: scb.triggered,
-        super_human_speed: shs.triggered,
-        has_cdp_mouse_leak: cdp.triggered,
+        is_suspicious_client: scb.triggered,
+        is_super_speed: shs.triggered,
+        is_mouse_leak: cdp.triggered,
       },
       issues,
       timestamp: Date.now(),
