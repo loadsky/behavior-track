@@ -1,3 +1,5 @@
+import type { RiskIndicators } from './reports';
+
 export interface SDKConfig {
   appId: string;
   endpoint?: string;
@@ -11,6 +13,7 @@ export interface SDKConfig {
   uploadRawStreamOnRisk?: boolean;
   rawStreamRiskThreshold?: number;
   rawStreamWindowBatches?: number;
+  disableSignals?: Array<keyof RiskIndicators>;
   debug?: boolean;
 }
 

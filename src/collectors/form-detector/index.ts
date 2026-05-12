@@ -1,10 +1,18 @@
-import type { FormDetectConfig, FormDetectionResult, FormSignalResults, EnvRiskSnapshot } from './types';
+import type { FormDetectConfig, FormDetectionResult, FormSignalResults, AnalyzerResult, EnvRiskSnapshot } from './types';
+import type { CollectedData } from './analyzers';
 import { subscribeDocObserver } from './doc-observer';
 import { EventCollector } from './event-collector';
 import { analyzeSuspiciousBehavior, analyzeSuperHumanSpeed, analyzeCDPMouseLeak, collectEnvIssues } from './analyzers';
 import { safeExec } from '../../utils/safe-exec';
 
 const SCOPE = 'form_detector';
+
+// 信号 → 分析函数 + 权重，新增检测项只需扩展此表
+const SIGNAL_ANALYZERS: Array<{ key: keyof FormSignalResults; fn: (data: CollectedData) => AnalyzerResult; weight: number }> = [
+  { key: 'is_suspicious_client', fn: analyzeSuspiciousBehavior, weight: 40 },
+  { key: 'is_super_speed', fn: analyzeSuperHumanSpeed, weight: 35 },
+  { key: 'is_mouse_leak', fn: analyzeCDPMouseLeak, weight: 25 },
+];
 
 /**
  * 表单行为检测器：监听表单内的用户交互行为，通过多维度信号分析判断是否为自动化操作。
@@ -25,6 +33,7 @@ export class FormDetector {
   constructor(config: FormDetectConfig) {
     this.config = config;
     if (config.envRisk) this.envRisk = config.envRisk;
+    // action 按钮或 Enter 键触发时调度分析
     this.collector = new EventCollector({ onSubmitAction: () => this.scheduleAnalyze() });
     this.resolveAndBind();
   }
@@ -41,6 +50,7 @@ export class FormDetector {
   getSignals(): FormSignalResults & { signalStrings: string[] } {
     const defaults: FormSignalResults = { is_suspicious_client: false, is_super_speed: false, is_mouse_leak: false };
     const signals = this.lastResult?.signals ?? defaults;
+    // 获取当前检测信号摘要，将触发的 key 转为 'form:is_xxx' 格式字符串
     const signalStrings = (Object.keys(signals) as Array<keyof FormSignalResults & string>)
       .filter(k => signals[k])
       .map(k => `form:${k}`);
@@ -103,25 +113,31 @@ export class FormDetector {
     }
   }
 
-  // 核心分析入口：获取数据快照 → 调用三个分析函数 → 计算综合风险分
+  // 核心分析入口：获取数据快照 → 遍历分析表 → 计算综合风险分
   private analyze(): void {
     if (this.destroyed || !this.container) return;
 
     const data = this.collector.snapshot(this.container);
+    // disableSignals 中的检测项跳过执行，直接返回空结果
+    const disabled = this.config.disableSignals ?? [];
+    const EMPTY: AnalyzerResult = { triggered: false, codes: [] };
 
-    const scb = analyzeSuspiciousBehavior(data);
-    const shs = analyzeSuperHumanSpeed(data);
-    const cdp = analyzeCDPMouseLeak(data);
+    // 遍历 SIGNAL_ANALYZERS 表执行各检测项，disabled 项不调用分析函数
+    const results = SIGNAL_ANALYZERS.map(({ key, fn, weight }) => ({
+      key,
+      weight,
+      result: disabled.includes(key) ? EMPTY : fn(data),
+    }));
 
+    // 合并环境风险 issues 与表单行为 issues
     const envIssues = collectEnvIssues(this.envRisk);
-    const issues = [...scb.codes, ...shs.codes, ...cdp.codes, ...envIssues];
+    const issues = [...results.flatMap(r => r.result.codes), ...envIssues];
 
-    // 信号权重：SCB(40) > SHS(35) > CDP(25)，按权重降序排列
-    const formSignals: { weight: number }[] = [];
-    if (scb.triggered) formSignals.push({ weight: 40 });
-    if (shs.triggered) formSignals.push({ weight: 35 });
-    if (cdp.triggered) formSignals.push({ weight: 25 });
-    formSignals.sort((a, b) => b.weight - a.weight);
+    // 提取已触发信号的权重，按降序用于衰减评分
+    const formSignals = results
+      .filter(r => r.result.triggered)
+      .map(r => ({ weight: r.weight }))
+      .sort((a, b) => b.weight - a.weight);
 
     // 基础分 = 环境风险分，每增加一个信号按 0.6 衰减叠加（避免多信号简单相加超 100）
     let riskScore = this.envRisk?.risk_score ?? 0;
@@ -130,15 +146,14 @@ export class FormDetector {
     }
     riskScore = Math.min(Math.round(riskScore), 100);
 
+    // 将各检测项 triggered 状态组装为 FormSignalResults
+    const signals = Object.fromEntries(results.map(r => [r.key, r.result.triggered])) as unknown as FormSignalResults;
+
     const result: FormDetectionResult = {
       // 40 分为风险阈值，低于此值视为通过
       is_pass: riskScore < 40,
       risk_score: riskScore,
-      signals: {
-        is_suspicious_client: scb.triggered,
-        is_super_speed: shs.triggered,
-        is_mouse_leak: cdp.triggered,
-      },
+      signals,
       issues,
       timestamp: Date.now(),
     };

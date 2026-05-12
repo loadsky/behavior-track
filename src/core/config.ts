@@ -12,6 +12,7 @@ const DEFAULT_CONFIG: Omit<ResolvedConfig, 'appId'> = {
   uploadRawStreamOnRisk: false,
   rawStreamRiskThreshold: 60,
   rawStreamWindowBatches: 3,
+  disableSignals: [],
   debug: false,
 };
 

@@ -137,6 +137,15 @@ export class BehaviorTrackSDK {
       collectWebRTC(),
     ]);
 
+    // 将用户配置的 disableSignals 对应字段强制置 false，使其不参与后续评分
+    if (riskIndicators && this.config.disableSignals?.length) {
+      for (const key of this.config.disableSignals) {
+        if (key in riskIndicators && typeof riskIndicators[key] === 'boolean') {
+          (riskIndicators[key] as unknown) = false;
+        }
+      }
+    }
+
     const uaInfo = await parseBrowser();
     const pageCtx = getPageContext();
 

@@ -60,6 +60,7 @@ export interface FormDetectConfig {
   actionSelector: string;
   onResult: (result: FormDetectionResult) => void;
   envRisk?: EnvRiskSnapshot;
+  disableSignals?: Array<keyof FormSignalResults>;
 }
 
 export interface FormDetectionResult {
