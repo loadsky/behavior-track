@@ -28,7 +28,7 @@
 | 语言 | TypeScript 5.7（严格模式 `strict`+`noUnusedLocals`+`noUnusedParameters`） |
 | 打包 | Rollup 4 + `@rollup/plugin-typescript`，输出 ESM / CJS / UMD 三种产物，生产模式 Terser 压缩 |
 | 目标 | ES2020，lib 包含 DOM / DOM.Iterable |
-| 运行时依赖 | `@fingerprintjs/fingerprintjs` ^5.2.0（指纹）、`js-sha256` ^0.11.1（签名）、`fast-json-stable-stringify` ^2.1.0（确定性序列化） |
+| 运行时依赖 | `@fingerprintjs/fingerprintjs` ^5.2.0（指纹）、`ua-parser-js` ^2.0.9（UA/设备解析）、`js-sha256` ^0.11.1（签名）、`fast-json-stable-stringify` ^2.1.0（确定性序列化） |
 | 测试 | Vitest 3 + happy-dom；Playwright 用于真实浏览器回归（`scripts/test-risk.mjs`） |
 | 副作用 | `"sideEffects": false`，支持 Tree-Shaking |
 
@@ -45,12 +45,12 @@ src/
 ├── collectors/
 │   ├── fingerprint.ts             // FingerprintJS 封装
 │   ├── webrtc.ts                  // WebRTC 内网 IP 采集
-│   ├── environment/               // 环境检测聚合（6 个子模块）
+│   ├── environment/               // 环境检测聚合（automation/headless/devtools/consistency/iframe/worker-detect）
 │   ├── behavior/                  // 鼠标/键盘/滚动/触摸 4 个 Tracker
-│   └── form-detector/             // 表单反机器人检测器
+│   └── form-detector/             // 表单反机器人检测器（index/event-collector/analyzers/click-geometry/doc-observer/types）
 ├── storage/device-id.ts           // localStorage + IndexedDB 双写 UUID
 ├── transport/                     // 批量/重试/beacon/上报
-├── utils/                         // browser/id/integrity/safe-exec/throttle
+├── utils/                         // browser/generate-id/integrity/safe-exec/throttle/native-check/dom-path/diagnostics
 └── types/                         // 类型定义
 ```
 
@@ -78,6 +78,8 @@ SDK 对外仅暴露一个单例对象（`src/index.ts`）：
 | `detect` | `(cfg: FormDetectConfig) => void` | 注册表单检测器，可多次调用以监控多个表单 |
 | `pause` | `() => void` | 停止行为采集（active→paused） |
 | `resume` | `() => void` | 恢复行为采集（paused→active） |
+| `resetSession` | `() => string` | 生成新 `session_id` 并清零 `sequence_no` 与诊断计数，返回新 id |
+| `getDiagnostics` | `() => { error_counts, session_id, sequence_no }` | 读取各 scope `safeExec` 累计错误数、当前 session、序号 |
 | `destroy` | `() => void` | 卸载事件、清空队列、flush 剩余数据 |
 
 ### 2.1 配置项 `SDKConfig`
@@ -93,6 +95,10 @@ SDK 对外仅暴露一个单例对象（`src/index.ts`）：
 | `batchInterval` | `number` | `5000` | 批量 flush 周期（ms） |
 | `batchSize` | `number` | `50` | 单批上限，超过触发立即 flush |
 | `maxRetries` | `number` | `3` | 失败重试次数（指数退避+jitter） |
+| `uploadRawStreamOnRisk` | `boolean` | `false` | `risk_score ≥ rawStreamRiskThreshold` 时，后续批次追带原始 mouse/scroll 流 |
+| `rawStreamRiskThreshold` | `number` | `60` | 触发原始流追带的阈值 |
+| `rawStreamWindowBatches` | `number` | `3` | 命中阈值后追带原始流的连续批次数 |
+| `disableSignals` | `Array<keyof RiskIndicators>` | `[]` | 强制将列出的 RiskIndicators 布尔字段置 false，退出评分 |
 | `debug` | `boolean` | `false` | 预留调试标志 |
 
 ### 2.2 报告结构
@@ -111,9 +117,10 @@ SDK 对外仅暴露一个单例对象（`src/index.ts`）：
   user_agent: string,
   browser: string,          // chrome | edge | firefox | safari | opera | unknown
   browser_version: string,
-  os: string,               // Windows | Mac | Android | iOS | Linux
+  os: string,               // Windows | macOS | Android | iOS | Linux 等（UA-CH 优先，UAParser 回退）
   device_type: 'PC' | 'Mobile' | 'Tablet',
   risk_indicators: RiskIndicators,
+  error_counts?: Record<string, number>,  // 可选：各 scope safeExec 累计异常数
   integrity_check: string,  // sha256(fast-json-stable-stringify(payload))
 }
 ```
@@ -128,10 +135,16 @@ SDK 对外仅暴露一个单例对象（`src/index.ts`）：
   sequence_no: number,      // 自增序号
   timestamp: number,
   data_stream: {
-    mouse_tracks: MouseTrack[],
-    keyboard_stream: KeyboardEvent[],   // 按秒聚合
-    scroll_events: ScrollEvent[],
+    click_tracks: ClickTrack[],           // 全量上报 click/down/up
+    move_features: MoveFeatures,          // mousemove 聚合标量
+    scroll_summary: ScrollSummary,        // 滚动聚合标量
+    keyboard_stream: KeyboardEvent[],     // 按秒聚合
     touch_events: TouchEvent[],
+    raw_on_risk?: {                       // 风险触发窗口内的原始流
+      mouse_moves: RawMouseMove[],
+      scroll_events: RawScrollEvent[],
+      trigger_score: number,
+    },
   },
   integrity_check: string,
 }
@@ -141,21 +154,16 @@ SDK 对外仅暴露一个单例对象（`src/index.ts`）：
 
 | 字段 | 含义 |
 |---|---|
-| `is_webdriver` | 检测到任意 webdriver/自动化标志 |
+| `is_webdriver` | 主框架或 iframe 任一层命中 webdriver/自动化标志（跨层去重只计一次） |
 | `is_headless` | 无头浏览器特征累计 ≥2 |
-| `is_devtools_open` | DevTools 打开（尺寸差或 getter-trap） |
-| `is_cdp` | 命中 `Error.prepareStackTrace` runtime 钩子 |
-| `is_selenium` / `is_nightmare` / `is_sequentum` | 对应工具特征 |
-| `iframe_overridden` | iframe 原型链被篡改 |
-| `iframe_webdriver` | iframe 内 `navigator.webdriver` 为真 |
-| `worker_consistent` | Worker 与主线程 navigator 字段一致 |
-| `cdp_worker` | Worker 内检测到 CDP |
-| `is_tampered` | UA 不一致 / iframe 被改 / Worker 不一致的汇总 |
+| `is_devtools_open` | DevTools 打开（尺寸比值或 getter-trap） |
+| `is_cdp` | 主框架 / iframe / Worker 任一层命中 `Error.prepareStackTrace` runtime 钩子 |
+| `is_selenium` / `is_nightmare` / `is_sequentum` | 对应工具特征残留 |
+| `is_tampered` | UA/属性描述符/iframe 原型/Worker 任一维度被篡改 |
 | `is_proxy` | 预留，当前恒 false |
-| `is_mismatch` | UA ↔ platform ↔ touch 不一致 |
-| `is_suspicious_form` / `is_form_super_human` / `is_form_cdp_mouse` | 表单三大专项信号 |
+| `is_suspicious_client` / `is_super_speed` / `is_mouse_leak` | 表单三大专项信号（由 FormDetector 合并回 SDK） |
 | `risk_score` | 0-100 综合分值 |
-| `signals` | 字符串数组，所有命中的子信号码 |
+| `signals` | 字符串数组，所有命中的子信号码（含 `form:` 前缀的表单信号） |
 
 ---
 
@@ -228,24 +236,26 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 
 | 信号 | 判据 |
 |---|---|
-| `no_plugins` | `navigator.plugins.length === 0` |
+| `no_plugins` | 非移动端下 `navigator.plugins.length === 0` |
 | `no_languages` | `!navigator.languages \|\| length === 0` |
 | `headless_ua` | UA 包含 `HeadlessChrome` |
-| `chrome_obj_missing` | Chrome UA 下 `window.chrome` 缺失 |
+| `chrome_obj_missing` | 非移动端 Chrome UA 下 `window.chrome` 缺失 |
 | `zero_outer_dimensions` | `outerWidth === 0 && outerHeight === 0` |
 | `notification_denied_default` | 非 Firefox 下 `Notification.permission === 'denied'` |
 | `software_renderer` | WebGL `UNMASKED_RENDERER_WEBGL` 匹配 `SwiftShader\|llvmpipe\|Mesa` |
 
-**阈值**：`is_headless = signals.length >= 2`（降低单信号误杀）。
+移动端经 UAParser 识别为 mobile/tablet 时跳过 `no_plugins`/`chrome_obj_missing` 避免误判。**阈值**：`is_headless = signals.length >= 2`（降低单信号误杀）。
 
-#### 3.4.3 `devtools.ts` — 开发者工具
+#### 3.4.3 `devtools.ts` — 开发者工具与运行时篡改
 
-三种互补探测：
-1. **尺寸差**：`outerWidth - innerWidth > 160` 或 `outerHeight - innerHeight > 160`（停靠面板打开）。
+主要探测：
+1. **尺寸比值**：`innerWidth/outerWidth < 0.88` 或 `innerHeight/outerHeight < 0.75` 视为面板停靠（`outer < 50` 时跳过以躲避 iframe/minimized 误触）。
 2. **getter-trap**：构造 `Image`，在 `id` 属性上埋 getter，然后 `console.debug('%c', el)`；DevTools 渲染 console 输出时会读 `id`，触发 getter。
-3. **CDP runtime 探测**：替换 `Error.prepareStackTrace`，`console.log(new Error(''))`；若 `prepareStackTrace` 被调用，说明有运行时（Chromium DevTools / Puppeteer / CDP）在格式化栈帧。
+3. **CDP runtime 探测**：替换 `Error.prepareStackTrace`，`console.debug(new Error(''))`；若 `prepareStackTrace` 被调用，说明有运行时（Chromium DevTools / Puppeteer / CDP）在格式化栈帧。
+4. **属性描述符原生性**：检查 `window.outerWidth/outerHeight`、`navigator.webdriver` 的 getter 是否被改写（`prop_descriptor_tampered`）。
+5. **原生函数校验**：`console.debug`、`Function.prototype.toString` 的 `toString()` 是否含 `[native code]`（`console_tampered` / `tostring_tampered`）。
 
-`is_open = size_diff || getter_trap`；`is_cdp = cdp_runtime`。`is_cdp && !is_open` 被聚合器视为"调试器隐藏打开"高风险场景（50 分）。
+`is_open = size_diff || getter_trap`；`is_cdp = cdp_runtime`；`is_tampered` 汇总上述篡改类信号。`is_cdp && !is_open` 被聚合器视为"调试器隐藏打开"高风险场景。
 
 #### 3.4.4 `consistency.ts` — UA 一致性
 
@@ -259,7 +269,7 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 
 `is_mismatch = signals.length > 0`。
 
-#### 3.4.5 `iframe.ts` — iframe 原型链篡改
+#### 3.4.5 `iframe.ts` — iframe 原型链篡改与跨帧交叉验证
 
 | 信号 | 判据 | 含义 |
 |---|---|---|
@@ -267,8 +277,11 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 | `iframe_contentWindow_eq_window` | `cw === window` | 工具错误地让 contentWindow 指向主窗口 |
 | `iframe_setTimeout_same` | `cw.setTimeout === window.setTimeout` | 正常 iframe 有独立 window，引用应不同 |
 | `iframe_webdriver` | `cw.navigator.webdriver` | iframe 内的 webdriver 标志 |
+| `cdp_iframe` | 在 iframe 未污染的环境内执行 `Error.prepareStackTrace` 钩子探测命中 | 利用未污染帧跨帧交叉验证 CDP |
+| `iframe_prop_tampered` | 用 iframe 的 `Function.prototype.toString` 反查主窗口 `outerWidth` getter 非 `[native code]` | 跨帧揭露主框架属性描述符被改 |
+| `iframe_console_tampered` | iframe 的 `console.debug.toString()` 非 `[native code]` | iframe 内 console 被全局污染 |
 
-`is_overridden` 聚合前三条，`is_webdriver` 单独暴露，两者在 `risk_score` 中各自加权。
+`is_overridden` 聚合前三条（不含 webdriver/CDP/篡改），`is_webdriver` / `is_cdp` / `is_tampered` 各自独立暴露，供聚合器按权重叠加。
 
 #### 3.4.6 `worker-detect.ts` — Web Worker 一致性
 
@@ -279,11 +292,15 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 
 信号：`worker_webdriver_mismatch / worker_ua_mismatch / worker_hw_mismatch / worker_platform_mismatch / worker_languages_mismatch / cdp_worker`。
 
-**设计亮点**：`is_consistent = signals.length === 0 || (length === 1 && signals[0] === 'cdp_worker')`——`cdp_worker` 独立上报但不计入"不一致"（CDP 不等于 navigator 被伪造）。5s 超时兜底，Worker 创建失败保守视为 consistent。
+**设计亮点**：`is_tampered = !(len === 0 || (len === 1 && only cdp_worker))`——`cdp_worker` 独立上报但不算"不一致"。`is_cdp` 单独暴露给聚合器。5s 超时兜底，Worker 创建失败保守视为一致。
 
 #### 3.4.7 聚合与 `risk_score` 计算（`environment/index.ts`）
 
-自动化强信号先汇总到 `autoSignals[]`（每条 50 分）：`is_webdriver` / `is_headless` / `is_cdp && !is_open` / `is_selenium` / `is_nightmare` / `is_sequentum` / `iframe_webdriver`。
+先对跨层同根因信号做**去重合并**：
+- `hasWebdriver = automation.is_webdriver || iframe.is_webdriver`
+- `hasCdp = devtools.is_cdp || iframe.is_cdp || worker.is_cdp`
+
+自动化强信号先汇总到 `autoSignals[]`（每条 50 分）：`hasWebdriver` / `headless.is_headless` / `devtools.is_tampered` / `hasCdp && !devtools.is_open` / `selenium_cdc*` / `nightmare` / `sequentum`。
 
 **递减叠加算法**（避免简单累加饱和）：
 
@@ -294,19 +311,23 @@ score = Σ weight[i] * 0.5^i
 
 第 1 条 50，第 2 条 25，第 3 条 12.5...；根据命中数量加 bonus：≥2 条 +10，≥3 条 +20。
 
-再叠加弱信号：`devtools.is_open +10` / `is_mismatch +15` / `iframe.is_overridden +15` / `!worker.is_consistent +15` / `worker.is_cdp +10`。
+再叠加弱信号：`devtools.is_open +10` / `iframe.is_tampered +10` / `consistency.is_mismatch +15` / `iframe.is_overridden +15` / `worker.is_tampered +15`。
 
 最终 `risk_score = min(round(score), 100)`。
 
-表单信号在 `sdk.ts::computeUpdatedRiskScore` 中以 0.6 衰减基数合并（权重 35/30/25）。
+`is_tampered` 综合 `consistency.is_mismatch || iframe.is_overridden || worker.is_tampered || devtools.is_tampered || iframe.is_tampered`，作为顶层字段暴露。
 
-**设计评价**：递减几何衰减 + 分层叠加是风控评分的好实践，避免"两条强信号就直接爆表"，同时多信号会显著提分。
+表单信号由 SDK 在 `computeUpdatedRiskScore` 中以 0.6 衰减基数合并（权重 35/30/25），合并表单权重与 FormDetector 内部 SCB/SHS/CDP 自身的 40/35/25 **分工不同**——前者作用于 env 基线扩展，后者用于 FormDetector 自身风险分。
+
+**设计评价**：递减几何衰减 + 分层叠加是风控评分的好实践，避免"两条强信号就直接爆表"，同时多信号会显著提分；跨层去重减少了对同一根因的重复加权。
 
 ---
 
 ### 3.5 行为流采集（`src/collectors/behavior/`）
 
 `BehaviorManager` 组合四个 Tracker，启动时按 `behaviorSampleRate` 做一次伯努利抽样（决策后缓存复用，避免 pause/resume 周期内反悔），决定是否挂钩子。监听器都走 `document`/`window`、`{ passive: true }`，不阻塞默认事件。`drain()` 时重置抽样缓存。
+
+输出结构：`click_tracks`（全量）+ `move_features`/`scroll_summary`（聚合标量）+ `keyboard_stream`（按秒聚合）+ `touch_events`（全量）；当 SDK 判定风险窗口命中时，本批次额外追带 `raw_on_risk.mouse_moves` / `raw_on_risk.scroll_events` 原始流及 `trigger_score`。
 
 #### 3.5.1 `MouseTracker`（`mouse.ts`）
 
@@ -319,10 +340,10 @@ score = Σ weight[i] * 0.5^i
 
 #### 3.5.2 `KeyboardTracker`（`keyboard.ts`）
 
-**不记录键值**（隐私/合规），**仅记录可打印键**（`e.key.length === 1`，过滤修饰键/导航键/功能键），只做节奏分析：
+**不记录键值**（隐私/合规），**仅记录可打印键**（`e.key.length === 1`，过滤修饰键/导航键/功能键，同时过滤 `isComposing` 跳过 IME），只做节奏分析：
 
-- `keydown`：非可打印键直接 return；记录时间戳，累加 `keyCount`、`trusted_count`，计算与上次间隔到 `intervalSum`；`holdStart` 置为当前时间。
-- `keyup`：非可打印键直接 return；`holdSum += now - holdStart`。
+- `keydown`：非可打印/合成键直接 return；记录时间戳，累加 `keyCount`、`trusted_count`，计算与上次间隔到 `intervalSum`；`holdStart` 置为当前时间。
+- `keyup`：非可打印/合成键直接 return；`holdSum += now - holdStart`。
 - **每 1s 聚合一次**（`setInterval`）：
 
 ```ts
@@ -354,7 +375,7 @@ score = Σ weight[i] * 0.5^i
 ---
 ### 3.6 表单反机器人检测（`src/collectors/form-detector/`）
 
-按**表单粒度**独立运行的深度检测器，由 `SDK.detect()` 注册，可同一页面注册多个。
+按**表单粒度**独立运行的深度检测器，由 `SDK.detect()` 注册，可同一页面注册多个。代码按职责拆分为 `index.ts`（编排）/ `event-collector.ts`（事件采集）/ `analyzers.ts`（分析函数）/ `click-geometry.ts`（点击几何）/ `doc-observer.ts`（文档观察）/ `types.ts`。
 
 #### 3.6.1 配置与生命周期
 
@@ -363,86 +384,105 @@ interface FormDetectConfig {
   containerSelector: string;   // 表单容器
   actionSelector: string;      // 提交按钮
   onResult: (r: FormDetectionResult) => void;
+  envRisk?: EnvRiskSnapshot;                    // 可选注入，SDK 自动更新
+  disableSignals?: Array<'is_suspicious_client' | 'is_super_speed' | 'is_mouse_leak'>;
 }
 ```
 
-- 构造函数调用 `resolveAndBind()`：立即查询 container/actionEl；在 `document.documentElement` 上挂 `MutationObserver`——如果 container 后挂载（SPA 场景），自动补绑。
-- 绑定事件：`focusin/click/input/keydown/keyup/mousemove`（容器内），外加 `document` 的 `keydown/keyup/mousemove`，以及 `actionEl.click` 和容器级 Enter 提交。
-- 容器内部再挂一层 `MutationObserver`（`childList + subtree`）处理动态字段渲染，会重新 `scanFields()`。
+- 构造函数调用 `resolveAndBind()`：立即查询 container/actionEl；通过 `subscribeDocObserver` 订阅全局 `document` MutationObserver——如果 container 后挂载（SPA 场景），自动补绑。
+- 事件绑定由 `EventCollector` 统一管理，`bind()` 时全部挂 `{ passive: true }`：
+  - 容器级：`click / input / keydown / compositionstart / compositionend / paste`
+  - 全局：`document` 的 `keydown / keyup / mousemove`
+  - `actionEl.click` + 容器级 `keydown`（Enter 捕获）
+  - 容器内一层 `MutationObserver`（`childList + subtree`）处理动态字段渲染，会重新 `scanFields()`。
 
 #### 3.6.2 每字段状态 `FieldState`
 
 ```
-{ hadFocus, hadClick, hadInput, hadKeydown, hadKeyup, inputTrusted,
+{ hadClick, hadInput, hadKeydown, hadPaste, inputTrusted,
   firstInputTime, lastInputTime, clickCount, clickCentered, clickCorner,
-  clickOffsetKey, tabPressed, modifierUsed, totalChars }
+  clickOffsetKey, tabPressed, totalChars, fieldName, element }
 ```
 
-- `clickCentered`：点击点与字段中心距离 `dx<=3 && dy<=3`。
+- `clickCentered`：点击点与字段中心距离 `dx<=3 && dy<=3`（`click-geometry.ts::isCenterClick`）。
 - `clickCorner`：距四角 ≤3px。
 - `clickOffsetKey`：`"round(dx),round(dy)"`，跨字段去重检测机械偏移。
+- `hadPaste`：粘贴事件标记，打字速度统计会排除此字段。
+- `inputTrusted`：首次 input 事件的 `isTrusted`，任何一次非可信 input 会拉低为 false。
+- IME 组合输入期间（`composing` 标志或 `isComposing`）`input` 事件直接忽略；`keydown` 同时过滤 `keyCode === 229`。
 
 #### 3.6.3 触发时机
 
-两个入口：用户点击 `actionEl`（提交按钮）；用户在 input/textarea 内按下 `Enter`（无修饰键）。两者均调 `analyze()`。
+两个入口：用户点击 `actionEl`（提交按钮）；用户在 input/textarea 内按下 `Enter`（无 Shift/Ctrl/Meta 修饰）。两者均经 `scheduleAnalyze()` 走 `requestIdleCallback`（200ms 超时兜底）异步执行 `analyze()`，避免阻塞提交。
+
+action 点击还会重置一个 `ActionClickState`（记录 count/centered/corner/noPrecedingMove/zeroCoord），后续点击类检测项把它作为**前置条件**——只有 action 点击存在至少一种可疑特征时才进入 CENTER_CORNER / SAME_OFFSET / NO_MOUSE_BEFORE / UNTRUSTED_EVENTS / CDP 整数坐标等深度判定，以降低普通用户误触发率。
+
+另外 `ClickRecord` / `KeyRecord` 各自设置 100 / 300 条滚动上限（FIFO 丢头），防止长时间运行导致内存膨胀。
 
 #### 3.6.4 三大信号算法
 
-##### (A) `suspiciousClientSideBehavior`（可疑客户端行为）
+代码通过一张 `SIGNAL_ANALYZERS` 表集中声明「键 → 分析函数 → 权重」映射，`analyze()` 遍历此表，`disableSignals` 列表中的项跳过执行，其余执行后按触发状态与权重参与综合分计算。
+
+##### (A) `analyzeSuspiciousBehavior` → `is_suspicious_client`
 
 6 个子检查，命中 **≥2** 项置真。`is_trusted` 为 false 的事件是核心判据：
 
 | 代码 | 判据 |
 |---|---|
-| `NO_KEYBOARD_BUT_VALUE` | 存在字段：`hadInput && !hadKeydown && !inputTrusted && totalChars>0`（排除浏览器自动填充） |
-| `CENTER_CORNER_CLICK` | 总点击 ≥2 且 中心/四角点击比 > 2/3 |
-| `SAME_CLICK_OFFSET` | ≥2 字段、≥2 次点击，`offsetKey` 去重后只剩 1 个 |
-| `NO_MOUSE_BEFORE_CLICK` | 点击 ≥3，无前置鼠标移动比例 > 50% |
-| `NO_TAB_NO_CLICK_SWITCH` | ≥2 个非可信输入字段，全部没按 Tab 且没点击切换 |
-| `PARALLEL_FILL` | ≥2 个非可信字段的首次输入间隔 < 100ms |
-| `UNTRUSTED_EVENTS`（附加） | ≥2 次点击全部 `isTrusted=false` |
+| `no_keyboard_but_value` | 存在字段：`hadInput && !hadKeydown && !inputTrusted && !hadPaste && totalChars>0`（排除浏览器自动填充与粘贴） |
+| `center_corner_click` | action 可疑且总点击 ≥2 时 中心/四角点击占比 > 2/3 |
+| `same_click_offset` | action 可疑且 ≥2 字段共享同一 `offsetKey`（去重后只剩 1 个） |
+| `no_mouse_before_click` | action 可疑且非受信无前置鼠标移动的点击占比 > 50%（≥3 次点击样本） |
+| `no_tab_no_click_switch` | ≥2 个非可信输入字段，全部没按 Tab 且没点击切换 |
+| `parallel_fill` | ≥2 个非可信字段的首次输入间隔 < 100ms |
+| `untrusted_events` | action 可疑且点击 ≥2 时全部 `isTrusted=false` |
 
-##### (B) `superHumanSpeed`（超人类速度）
+##### (B) `analyzeSuperHumanSpeed` → `is_super_speed`
 
 命中 **≥2** 项置真：
 
 | 代码 | 判据 |
 |---|---|
-| `BATCH_ASSIGN` | fillDuration === 0（瞬时赋值）且存在非可信 input |
-| `TYPING_TOO_FAST` | 字符/秒 (cps) > 20 |
-| `UNIFORM_INTERVALS` | 总按键 > 10，按键间隔变异系数 CV < 0.1 |
-| `ORPHAN_KEYDOWN` | orphanKeydowns >= 5（有 keydown 无 keyup，典型 CDP `Input.dispatchKeyEvent` 单发） |
+| `batch_assign` | `fillDuration === 0` 且存在非可信、非粘贴 input 且 `totalChars > 0` |
+| `typing_too_fast` | 字符/秒 (cps) > 20（粘贴字段的字符不计入） |
+| `uniform_intervals` | 总按键 > 10，按键间隔变异系数 CV < 0.1 |
+| `orphan_keydown` | `orphanKeydowns >= 5`（有 keydown 无 keyup，典型 CDP `Input.dispatchKeyEvent` 单发） |
 
 **打字节奏算法** `buildTypingCadence`：
 - 取所有 keydown 间隔 `gap ∈ (0, 2000)`（过滤暂停/粘贴等）；
 - `avg = mean(intervals)`，`std = sqrt(mean((x-avg)²))`，`CV = std/avg`；
 - `orphanKeydowns` = 无对应 keyup 的 keydown 数。
 
-**CV < 0.1 的含义**：人类打字节奏抖动自然，CV 通常 > 0.3。低于 0.1 意味着几乎等间距，典型脚本 `sleep(50) sendKey(...)` 循环。
+**CV < 0.1 的含义**：人类打字节奏抖动自然，CV 通常 > 0.2。低于 0.1 意味着几乎等间距，典型脚本 `sleep(50) sendKey(...)` 循环。
 
-##### (C) `hasCDPMouseLeak`（CDP 鼠标指纹泄漏）
+##### (C) `analyzeCDPMouseLeak` → `is_mouse_leak`
 
-针对 Puppeteer/Playwright `Input.dispatchMouseEvent` 已知特征：
+针对 Puppeteer/Playwright `Input.dispatchMouseEvent` 已知特征，仅在 action 可疑时参与；零坐标点击直接判定，其余需命中 **≥2** 项：
 
 | 代码 | 判据 |
 |---|---|
-| `ZERO_COORD_CLICK` | 任意点击 `x===0 && y===0`（CDP 默认坐标）→ **直接置真 return** |
-| `INTEGER_COORDS` | 总点击 ≥5，整数坐标比例 > 95%，且不同坐标 ≥3（排除 Retina + 重复同位置） |
-| `COORD_INCONSISTENT` | `abs(pageX - clientX - scrollX) > 1`（CDP 合成事件 page/client 算术关系被破坏） |
-| `OFFSET_ANOMALY` | `offsetX===0 && offsetY===0` 但 clientX/Y 正常（超过 30%） |
-| 附加 | 未信任点击比例 > 30% |
+| `zero_coord_click` | 任意点击 `x===0 && y===0 && !isTrusted` → **直接置真 return** |
+| `integer_coords` | 总点击 ≥5，整数坐标比例 > 95%，且不同坐标 ≥3（排除 Retina + 重复同位置） |
+| `coord_inconsistent` | `abs(pageX - clientX - scrollX) > 1`（CDP 合成事件 page/client 算术关系被破坏） |
+| `offset_anomaly` | `offsetX===0 && offsetY===0` 但 clientX/Y > 10px 的比例 > 30% |
+| 附加 | 未信任点击比例 > 30%（无 code，仅计入 check 数） |
 
-除首条外，其余需命中 **≥2** 项置真。
+##### (D) 环境 issues 归并
 
-##### (D) 风险分合并
+除上述三大信号外，`FormDetector` 还通过 `collectEnvIssues(envRisk)` 将环境风险快照 (`is_cdp/is_devtools_open/is_webdriver/is_headless/is_tampered`) 翻译为 `env_cdp_detected/env_devtools_open/env_webdriver/env_headless/env_tampered` 追加到 `issues`，便于业务端看到完整上下文。
+
+##### (E) 风险分合并（FormDetector 内部）
 
 ```
-riskScore = 0
-if scb:  +40  /  if shs: +35  /  if cdpm: +25
+baseScore = envRisk?.risk_score ?? 0
+formSignals = 触发项 [{ weight: 40 | 35 | 25 }]  // is_suspicious_client=40, is_super_speed=35, is_mouse_leak=25
+sort desc by weight
+riskScore = baseScore + Σ weight[i] * 0.6^i
+riskScore = min(round, 100)
 is_pass = riskScore < 40
 ```
 
-`FormDetector.getSignals()` 被 SDK `collectEnv()` 调用，将三大信号和 issue code（以 `form:` 前缀）合并回 `EnvStaticReport.risk_indicators`。
+`FormDetector.getSignals()` 被 SDK `collectEnv()` 调用，将三大布尔信号和 issue code（以 `form:` 前缀）合并回 `EnvStaticReport.risk_indicators`；SDK 再用自身的 0.6 衰减 + 权重 35/30/25 把三大信号叠加到 env 基础分。SDK 层的 `lastEnvSnapshot` 会自动注入到每个 FormDetector，env 采集完成后会触发已有实例重新 `analyze()`。
 
 ---
 
@@ -526,6 +566,9 @@ function signReport(report) {
     batchInterval: 5000,
     batchSize: 50,
     maxRetries: 3,
+    uploadRawStreamOnRisk: false,
+    rawStreamRiskThreshold: 60,
+    rawStreamWindowBatches: 3,
   }).then(async () => {
     const env = await BehaviorTrack.getEnvInfo();
     console.log('风险分:', env.risk_indicators.risk_score);
@@ -589,11 +632,15 @@ node scripts/test-risk.mjs   # Playwright 驱动三种浏览器环境回归
 | **页面上下文** | `url/host/title/referrer/lang/timezone/cookie_enabled` | `location/document/navigator/Date` | url 可能含 query 中的 PII |
 | **UA/设备** | `user_agent/browser/browser_version/os/device_type` | UA-CH + UA 回退 | UA 本身可辨识 |
 | **风险指标** | `risk_indicators.*` | 十余项环境探测 | 否 |
-| **鼠标轨迹** | `{x,y,t,type,is_trusted}` | 全局 `mousemove/click/down/up`（throttle 50ms） | 轨迹可能间接反映行为习惯 |
-| **键盘统计** | `{t,key_count,trusted_count,interval_avg,hold_avg}` | 全局 `keydown/keyup`，**不记录键值** | 否 |
-| **滚动** | `{t,top,speed,direction,is_trusted}` | `window.scroll`（100ms 去抖） | 否 |
+| **点击轨迹** | `{t,type,x,y,page_x,page_y,viewport_w,viewport_h,dpr,target_tag,target_path,is_trusted}` | 全局 `click/mousedown/mouseup` | 轨迹可能间接反映行为习惯 |
+| **鼠标移动特征** | `{count,avg_speed,straight_ratio,pause_count,total_distance}` | 全局 `mousemove`（throttle 50ms）聚合标量 | 否 |
+| **鼠标原始流（触发式）** | `raw_on_risk.mouse_moves: {x,y,page_x,page_y,t,is_trusted}` | 仅在 `risk_score ≥ rawStreamRiskThreshold` 的窗口内追带 | 潜在行为生物特征 |
+| **键盘统计** | `{t,key_count,trusted_count,interval_avg,hold_avg}` | 全局 `keydown/keyup`，**不记录键值**，仅可打印键 | 否 |
+| **滚动摘要** | `{max_depth,total_scroll,direction_changes,duration,read_time}` | `window.scroll` 聚合（100ms 去抖） | 否 |
+| **滚动原始流（触发式）** | `raw_on_risk.scroll_events: {t,top,speed,direction,is_trusted}` | 仅风险窗口内追带 | 否 |
 | **触摸** | `{x,y,t,pressure,radius,is_trusted}` | `touchstart/move/end`，取 `touches[0]` | 否 |
 | **表单状态** | 每字段交互元数据、`totalChars`；**不记录 value** | 容器内事件 | 否 |
+| **运行诊断** | `error_counts: Record<scope, number>` | 各 scope `safeExec` 累计异常数 | 否 |
 
 **隐私亮点**：键盘不采集 `key` 值，仅统计节奏；表单字段不采集 `value`，只记字符长度和交互元数据。
 
@@ -607,23 +654,27 @@ node scripts/test-risk.mjs   # Playwright 驱动三种浏览器环境回归
 ### 6.1 `risk_score` 环境分
 
 ```
+// 跨层同根因信号先去重
+hasWebdriver = automation.is_webdriver || iframe.is_webdriver
+hasCdp       = devtools.is_cdp || iframe.is_cdp || worker.is_cdp
+
 autoSignals = []  // weight=50 each
-  if navigator.webdriver 或 webdriver 标志 → push
+  if hasWebdriver → push
   if 无头特征 ≥2 → push
-  if CDP runtime 命中 且 DevTools 未打开 → push
+  if devtools.is_tampered（描述符/console/toString 篡改） → push
+  if hasCdp && !devtools.is_open → push
   if Selenium/Nightmare/Sequentum 残留 → push
-  if iframe 内 navigator.webdriver → push
 
 autoSignals.sort(desc by weight)
 score = Σ weight[i] * 0.5^i          // 递减叠加
 score += (len>=3 ? 20 : len>=2 ? 10 : 0)
 
 // 弱信号线性叠加
-score += devtools_open ? 10 : 0
-score += is_mismatch ? 15 : 0
-score += iframe_overridden ? 15 : 0
-score += !worker_consistent ? 15 : 0
-score += cdp_worker ? 10 : 0
+score += devtools.is_open       ? 10 : 0
+score += iframe.is_tampered     ? 10 : 0
+score += consistency.is_mismatch ? 15 : 0
+score += iframe.is_overridden   ? 15 : 0
+score += worker.is_tampered     ? 15 : 0
 
 risk_score = min(round(score), 100)
 ```
@@ -631,10 +682,15 @@ risk_score = min(round(score), 100)
 ### 6.2 表单分合入主分
 
 ```
-formSignals: scb(35) / shs(30) / cdpm(25)
+// SDK 层：SCB/SHS/CDP 合入环境基础分
+formSignals: is_suspicious_client(35) / is_super_speed(30) / is_mouse_leak(25)
 sort desc by weight
 finalScore = baseScore + Σ weight[i] * 0.6^i
 finalScore = min(round, 100)
+
+// FormDetector 内部：同样的 0.6 衰减，但权重 40/35/25
+baseScore  = envRisk?.risk_score ?? 0
+formWeights: is_suspicious_client(40) / is_super_speed(35) / is_mouse_leak(25)
 ```
 
 ### 6.3 表单填写时长 / cps
@@ -705,41 +761,46 @@ integrity_check = sha256(fastJsonStableStringify(payload))
 
 ### 7.1 亮点
 
-1. **模块化清晰**：每个检测器单文件单职责，`environment/index.ts` 做聚合，便于新增检测项。
+1. **模块化清晰**：每个检测器单文件单职责，`environment/index.ts` 做聚合，便于新增检测项；FormDetector 拆出 `event-collector/analyzers/click-geometry/doc-observer`，分析函数由 `SIGNAL_ANALYZERS` 映射表声明式注册。
 2. **TS 严格模式**：`strict + noUnusedLocals + noUnusedParameters`，类型覆盖完整。
-3. **`safeExec` 防御性编程**：所有检测器都用 `try/catch` 包裹，任意一项失败不影响其他信号（风控 SDK 基本要求）。
-4. **评分算法合理**：递减几何衰减避免饱和，同时多信号叠加仍能抬升分值。
-5. **浏览器自动填充误报处理**：表单检测专门做了 `isTrusted` 过滤（commit `8cbc63f`）。
-6. **键值不采集**：合规方向的明确设计取舍。
-7. **UMD / ESM / CJS 三产物 + 类型声明**：适配广。
-8. **有真实浏览器回归脚本**：`test-risk.mjs` 跑 Headless / Headful / CDP 三场景。
+3. **`safeExec` 防御性编程**：所有检测器都用 `try/catch` 包裹，`incErrorCount` 按 scope 记录累计异常并通过 `getDiagnostics()` 暴露。
+4. **评分算法合理**：递减几何衰减避免饱和；webdriver/CDP 在主框架/iframe/Worker 三层检测时去重只计一次。
+5. **跨帧交叉验证**：`iframe.ts` 利用未污染帧的 `Function.prototype.toString`/`Error.prepareStackTrace` 反查主框架属性描述符和 CDP 状态，对抗 stealth 插件。
+6. **浏览器自动填充与粘贴误报处理**：表单检测同时过滤 `isTrusted` 和 `hadPaste` 字段，IME 组合阶段跳过 input/keydown。
+7. **键值不采集**：合规方向的明确设计取舍。
+8. **UMD / ESM / CJS 三产物 + 类型声明**：适配广。
+9. **触发式原始流回传**：默认只发聚合标量，`uploadRawStreamOnRisk` 打开后按 `risk_score ≥ rawStreamRiskThreshold` 在窗口期内追带 `raw_on_risk`。
+10. **有真实浏览器回归脚本**：`test-risk.mjs` 跑 Headless / Headful / CDP 三场景。
 
 ### 7.2 不足与改进建议
 
-| # | 问题 | 建议 |
+| # | 问题 | 建议 / 现状 |
 |---|---|---|
-| 1 | **`Reporter.dispatch` 未实际发请求**，仅 `console.log` | 接入 fetch POST，区分 4xx/5xx；支持 `keepalive: true` 取代 beacon | 待解决 |
-| 2 | `is_proxy` 恒 `false`，无实现 | 删除或实现（WebRTC / timezone vs geoip 交叉验证） | 待解决 |
-| 3 | ~~`Scheduler` 模块定义未使用~~ | 已删除（死代码清理） | ✅ |
-| 4 | ~~**完整性签名只排序顶层 key**，嵌套对象未保证顺序~~ | 已替换为 `fast-json-stable-stringify` 递归稳定排序 | ✅ |
-| 5 | `appId` 未参与签名/传输 | 至少作为 HMAC 密钥种子 | 待解决 |
-| 6 | `tests` 目录为空 | 至少补齐 `consistency`、`iframe`、`form-detector` 的单测 | 待解决 |
-| 7 | ~~`BehaviorManager.shouldSample` 每次 `start()` 重新抽样~~ | 已改为 sticky 缓存决策，`drain()` 时重置 | ✅ |
-| 8 | ~~`KeyboardTracker` 对任何键（含 Shift/Tab/方向）计入 `key_count`~~ | 已增加 `e.key.length === 1` 过滤，仅记录可打印键 | ✅ |
-| 9 | `collectWebRTC` 只匹配 IPv4 | 扩展 IPv6；mDNS 混淆时显式记录信号 | 待解决 |
-| 10 | ~~`RetryQueue.pending/addToPending/drainPending` 定义未用~~ | 已删除 | ✅ |
-| 11 | ~~`trustedClicks` 变量定义未读~~ | 实际被 `analyzeSuspiciousBehavior` 使用（行 458），非死代码 | ✅ 误报 |
-| 12 | ~~`devtools.ts` 尺寸差 160 阈值在高 DPI/小窗口误判~~ | 已改为 `inner/outer < 0.88` 比值判定，并在 `outer < 50` 时跳过（防 iframe/minimized 误触） | ✅ |
-| 13 | ~~表单 `keydown` 监听未 `passive`，Enter 触发 `analyze()` 同步执行~~ | 全部监听改 `{ passive: true }`；Enter/action 走 `scheduleAnalyze()`，`requestIdleCallback` 异步合并执行 | ✅ |
-| 14 | ~~行为流 `mouse_tracks` 无上限~~ | `MouseTracker` 拆 `moves/clicks` 双缓冲，各自按"时间窗 60s + 容量"双门控，且 mousemove 默认聚合为 `move_features` 不再全量上报 | ✅ |
-| 15 | `examples/index.html` 依赖 CDN Tailwind + Vue | 网络受限环境无法本地跑；考虑预打包 vendor | 待解决 |
-| 16 | 默认 `endpoint = ''` 导致 beacon 发到空路径 | 空 endpoint 时 warn | 待解决 |
-| 17 | ~~mousemove/scroll 全量上报信噪比低~~ | 常态上报 `move_features` / `scroll_summary` 聚合标量；`uploadRawStreamOnRisk` 开启后 `risk_score ≥ rawStreamRiskThreshold` 触发窗口内 `raw_on_risk` 追带原始流 | ✅ |
+| 1 | **`Reporter.dispatch` 未实际发请求**，仅 `console.log` | 接入 fetch POST，区分 4xx/5xx；支持 `keepalive: true` 取代 beacon — 待解决 |
+| 2 | `is_proxy` 恒 `false`，无实现 | 删除或实现（WebRTC / timezone vs geoip 交叉验证） — 待解决 |
+| 3 | `appId` 未参与签名/传输 | 至少作为 HMAC 密钥种子 — 待解决 |
+| 4 | `tests` 目录为空 | 至少补齐 `consistency`、`iframe`、`form-detector`、`integrity` 的单测 — 待解决 |
+| 5 | `collectWebRTC` 只匹配 IPv4 | 扩展 IPv6；mDNS 混淆时显式记录 `mdns_obfuscated` 信号 — 待解决 |
+| 6 | `examples/index.html` 依赖 CDN Tailwind + Vue | 网络受限环境无法本地跑；考虑预打包 vendor — 待解决 |
+| 7 | 默认 `endpoint = ''` 导致 beacon 发到空路径 | 空 endpoint 时 warn — 待解决 |
+| 8 | ~~`Scheduler` 模块定义未使用~~ | 已删除 ✅ |
+| 9 | ~~完整性签名只排序顶层 key，嵌套未保证顺序~~ | 已替换为 `fast-json-stable-stringify` 递归稳定排序 ✅ |
+| 10 | ~~`BehaviorManager.shouldSample` 每次 `start()` 重新抽样~~ | 已改为 sticky 缓存决策，`drain()` 时重置 ✅ |
+| 11 | ~~`KeyboardTracker` 对任何键（含 Shift/Tab/方向）计入 `key_count`~~ | 已增加 `e.key.length === 1` 过滤，仅记录可打印键 ✅ |
+| 12 | ~~`RetryQueue` 冗余 API~~ | 已精简 ✅ |
+| 13 | ~~`devtools.ts` 尺寸差 160 阈值在高 DPI/小窗口误判~~ | 已改为 `inner/outer < 0.88 / 0.75` 比值判定，并在 `outer < 50` 时跳过 ✅ |
+| 14 | ~~表单 `keydown` 监听未 `passive`，Enter 触发 `analyze()` 同步执行~~ | 全部监听改 `{ passive: true }`；Enter/action 走 `scheduleAnalyze()`，`requestIdleCallback`(200ms timeout) 异步合并执行 ✅ |
+| 15 | ~~行为流 `mouse_tracks` 无上限~~ | `MouseTracker` 拆 `moves/clicks` 双缓冲，各自"时间窗 60s + 容量"双门控；mousemove 默认聚合为 `move_features` ✅ |
+| 16 | ~~mousemove/scroll 全量上报信噪比低~~ | 常态上报聚合标量；`uploadRawStreamOnRisk` + `rawStreamRiskThreshold` + `rawStreamWindowBatches` 按风险窗口追带 `raw_on_risk` ✅ |
+| 17 | ~~webdriver / CDP 跨层检测重复加权~~ | 聚合器对 `hasWebdriver` / `hasCdp` 做去重合并只计一次 ✅ |
+| 18 | ~~风控评分调节不灵活~~ | 新增 `disableSignals` 允许把指定布尔信号强制置 false，跳过评分 ✅ |
+| 19 | ~~缺少运行时可观测性~~ | 新增 `error_counts` + `getDiagnostics()` + `resetSession()` API ✅ |
+| 20 | ~~移动端头无头判据误报~~ | `detectHeadless` 通过 UAParser 识别 mobile/tablet 后跳过 `no_plugins` / `chrome_obj_missing` ✅ |
 
 ### 7.3 安全视角
 
 - **反篡改**：当前签名是形式意义，客户端攻击者可重算。真正的方案需要服务端 `appId → appSecret` HMAC，或 WASM 黑盒混淆（开源版无解）。
-- **反绕过**：`navigator.webdriver` 可被 `puppeteer-extra-plugin-stealth` 消除，因此 SDK 堆叠了 iframe / Worker / Consistency 三套交叉验证。`Error.prepareStackTrace` 是当前识别 Puppeteer stealth 模式的最可靠方法之一。建议定期同步 evasion 规避库变化。
+- **反绕过**：`navigator.webdriver` 可被 `puppeteer-extra-plugin-stealth` 消除，因此 SDK 堆叠了多套交叉验证：iframe（跨帧 `Function.prototype.toString` 反查主框架属性描述符 + 未污染帧重做 CDP 探测）/ Worker（独立上下文比对 navigator + 重做 CDP 探测）/ Consistency（UA ↔ platform/touch 一致性、`Navigator.prototype.userAgent` 原型）/ Devtools（`prop_descriptor_tampered` / `console_tampered` / `tostring_tampered` 原生性校验）。`Error.prepareStackTrace` 是当前识别 Puppeteer stealth 模式最可靠的方法之一，且在主框架/iframe/Worker 三层同时布点、任一命中即 `is_cdp`。建议定期同步 evasion 规避库变化。
 
 ---
 
@@ -750,13 +811,13 @@ integrity_check = sha256(fastJsonStableStringify(payload))
 | `init` → `getDeviceId` | localStorage 同步读 ~0.1ms；新设备 IDB 首次 open ~10-50ms |
 | `getFingerprint` | FingerprintJS 首次 `load+get` 约 100-300ms |
 | `collectWebRTC` | 最多 3s 超时，通常 200-500ms |
-| `collectEnvironment` | 6 检测器串行，Worker 最慢，整体 30-200ms |
-| `MouseTracker` | `throttle 50ms`，每次 push 几 μs |
+| `collectEnvironment` | 6 个检测器顺序执行（`detectWorkerConsistency` 返回 Promise，Worker 最慢 ~5s 超时），整体 30-200ms；与 fingerprint/webrtc 在 `Promise.all` 中并发 |
+| `MouseTracker` | `throttle 50ms`，每次 push 几 μs；`drain()` 聚合 `move_features` 是单次线性扫描 |
 | `KeyboardTracker` | 每秒聚合一次，轻量 |
-| `FormDetector` 事件 | 每次键盘/点击 O(1)；`analyze` 在提交时一次，O(fields * records) |
-| `signReport` | sha256 + JSON.stringify，数百 μs（报告 <5KB） |
+| `FormDetector` 事件 | 每次键盘/点击 O(1)；`analyze` 在提交时一次通过 `requestIdleCallback` 调度，O(fields * records) |
+| `signReport` | sha256 + `fast-json-stable-stringify`，数百 μs（报告 <5KB） |
 
-包体积（生产 + terser，未实测）预计 **60-100KB**（FingerprintJS 即 ~50KB minified）。
+包体积（生产 + terser，未实测）预计 **60-100KB**（FingerprintJS 即 ~50KB minified，`ua-parser-js` 加入后另增 ~10KB）。
 
 ---
 
@@ -770,17 +831,18 @@ integrity_check = sha256(fastJsonStableStringify(payload))
 
 | 维度 | 评级 | 备注 |
 |---|---|---|
-| 架构设计 | ★★★★☆ | 分层清晰，可扩展；Reporter 占位待接入 |
-| 代码质量 | ★★★★☆ | TS 严格；少量未使用变量 |
-| 算法深度 | ★★★★☆ | 递减叠加评分 + 多源交叉 + 表单节奏分析 |
-| 工程化 | ★★★☆☆ | 构建/类型/Demo 齐全；缺单测 |
+| 架构设计 | ★★★★☆ | 分层清晰，可扩展；跨层去重合并 + 触发式原始流；Reporter 占位待接入 |
+| 代码质量 | ★★★★☆ | TS 严格模式，`safeExec` + `diagnostics` 运行时可观测 |
+| 算法深度 | ★★★★☆ | 递减叠加评分 + 多源交叉 + 跨帧验证 + 表单节奏/CDP 指纹 |
+| 工程化 | ★★★☆☆ | 构建/类型/Demo/Playwright 回归齐全；`tests/` 目录仍为空，缺单测 |
 | 生产就绪度 | ★★★☆☆ | Reporter 未接实际 HTTP；签名对抗强度有限 |
-| 合规友好度 | ★★★★☆ | 键值/值不采集；WebRTC IP 需前置同意 |
+| 合规友好度 | ★★★★☆ | 键值/值不采集；原始鼠标流默认关闭，仅风险窗口追带；WebRTC IP 需前置同意 |
 
 ### 9.3 推荐 Next Steps（按优先级）
 
-1. **实现 `Reporter.dispatch` 的真实 fetch**（含 `keepalive` 作为 beacon 替代或互补）。
-2. **补齐单元测试**：至少覆盖 `consistency / iframe / form-detector / integrity` 四个关键模块。
-3. **服务端签名**：引入 `appSecret` + HMAC，SDK 内做密钥不落地的分发。
-4. **WebRTC mDNS 显式标记**：拿不到真实 IP 时记录 `mdns_obfuscated` 信号。
-5. **行为流硬上限**：避免高频交互场景单批爆量。
+1. **实现 `Reporter.dispatch` 的真实 fetch**（含 `keepalive: true` 作为 beacon 替代或互补，区分 4xx/5xx 决定是否进 RetryQueue）。
+2. **补齐单元测试**：至少覆盖 `environment/consistency` / `environment/iframe` / `form-detector/analyzers` / `utils/integrity` 四个关键模块；`happy-dom` 足够撑起主要用例。
+3. **服务端签名**：引入 `appSecret` + HMAC，SDK 内做密钥不落地的分发；让 `appId` 进入签名 payload。
+4. **WebRTC mDNS 显式标记**：拿不到真实 IP 时记录 `mdns_obfuscated` 信号，避免把"缺 IP"误当成"没风险"。
+5. **`examples/index.html` 去 CDN 化**：预打包 Tailwind + Vue3 到 `examples/vendor/`，内网/离线环境也能跑 demo。
+6. **原始流带宽治理**：`raw_on_risk` 在风险窗口内追带，需要服务端侧配合做采样/抽稀或额外压缩，避免极端攻击下的放大效应。
