@@ -15,24 +15,50 @@ export function detectAutomation(): AutomationResult {
   }, undefined, SCOPE);
 
   safeExec(() => {
-    if ((window as unknown as Record<string, unknown>).__selenium_unwrapped) signals.push('selenium_unwrapped');
-    if ((window as unknown as Record<string, unknown>).__webdriver_evaluate) signals.push('webdriver_evaluate');
-    if ((window as unknown as Record<string, unknown>).__driver_evaluate) signals.push('driver_evaluate');
+    const win = window as unknown as Record<string, unknown>;
+    const props = [
+      '__selenium_unwrapped',
+      '__webdriver_evaluate',
+      '__driver_evaluate',
+      'callPhantom',
+      '_phantom',
+      '__playwright',
+      '__pw_manual',
+      '_playwright',
+      '__puppeteer_evaluation_script__',
+      'puppeteerBinding',
+      'selenium',
+      'webdriver',
+      '__cdp__',
+      'cdc_adoQpoasnfa76pfcZLmcfl_Array',
+      'cdc_adoQpoasnfa76pfcZLmcfl_Promise',
+      'cdc_adoQpoasnfa76pfcZLmcfl_Symbol',
+      '__nightmare',
+    ];
+    for (const prop of props) {
+      if (win[prop]) signals.push(prop);
+    }
   }, undefined, SCOPE);
 
   safeExec(() => {
-    if ((window as unknown as Record<string, unknown>).callPhantom) signals.push('phantomjs');
-    if ((window as unknown as Record<string, unknown>)._phantom) signals.push('_phantom');
-  }, undefined, SCOPE);
-
-  safeExec(() => {
-    if ((window as unknown as Record<string, unknown>).__playwright) signals.push('playwright');
-    if ((window as unknown as Record<string, unknown>).__pw_manual) signals.push('playwright_manual');
-  }, undefined, SCOPE);
-
-  safeExec(() => {
-    if ((document as unknown as Record<string, unknown>).__webdriver_script_fn) signals.push('webdriver_script_fn');
-    if ((document as unknown as Record<string, unknown>).__fxdriver_unwrapped) signals.push('fxdriver');
+    const doc = document as unknown as Record<string, unknown>;
+    const props = [
+      '__webdriver_script_fn',
+      '__webdriver_script_function',
+      '__webdriver_script_func',
+      '__fxdriver_unwrapped',
+      '__fxdriver_evaluate',
+      '__driver_unwrapped',
+      '__webdriver_unwrapped',
+      '__selenium_unwrapped',
+      '__webdriver_evaluate',
+      '__driver_evaluate',
+      '$chrome_asyncScriptInfo',
+      '$cdc_asdjflasutopfhvcZLmcfl_',
+    ];
+    for (const prop of props) {
+      if (doc[prop]) signals.push(prop);
+    }
   }, undefined, SCOPE);
 
   safeExec(() => {
@@ -47,15 +73,6 @@ export function detectAutomation(): AutomationResult {
     if (permissions && typeof permissions.query === 'undefined') {
       signals.push('permissions_api_missing');
     }
-  }, undefined, SCOPE);
-
-  safeExec(() => {
-    if ((document as unknown as Record<string, unknown>).$cdc_asdjflasutopfhvcZLmcfl_) signals.push('selenium_cdc');
-    if ((window as unknown as Record<string, unknown>).cdc_adoQpoasnfa76pfcZLmcfl_Array) signals.push('selenium_cdc_array');
-  }, undefined, SCOPE);
-
-  safeExec(() => {
-    if ((window as unknown as Record<string, unknown>).__nightmare) signals.push('nightmare');
   }, undefined, SCOPE);
 
   safeExec(() => {
