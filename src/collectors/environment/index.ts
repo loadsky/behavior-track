@@ -32,7 +32,6 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
   const autoSignals: { weight: number }[] = [];
   if (hasWebdriver) autoSignals.push({ weight: 50 });
   if (headless.is_headless) autoSignals.push({ weight: 50 });
-  if (devtools.is_tampered) autoSignals.push({ weight: 50 });
   if (hasCdp && !devtools.is_open) autoSignals.push({ weight: 50 });
 
   // Selenium/Nightmare/Sequentum 来自 automation.signals
@@ -53,6 +52,7 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
   else if (autoSignals.length >= 2) riskScore += 10;
 
   if (devtools.is_open) riskScore += 10;
+  if (devtools.is_tampered) riskScore += 10;
   if (iframe.is_tampered) riskScore += 10;
   if (consistency.is_mismatch) riskScore += 15;
   if (iframe.is_overridden) riskScore += 15;

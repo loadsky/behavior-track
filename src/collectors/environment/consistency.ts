@@ -17,7 +17,7 @@ export function detectConsistency(): ConsistencyResult {
     if (ua.includes('Windows') && !platform.includes('win')) {
       signals.push('ua_platform_mismatch');
     }
-    if (ua.includes('Mac') && !platform.includes('mac')) {
+    if (ua.includes('Mac') && !ua.includes('Mobile') && !platform.includes('mac')) {
       signals.push('ua_platform_mismatch');
     }
     if (ua.includes('Linux') && !platform.includes('linux') && !platform.includes('android')) {
