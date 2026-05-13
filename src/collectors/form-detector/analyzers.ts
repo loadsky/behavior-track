@@ -285,7 +285,7 @@ export function collectEnvIssues(envRisk: EnvRiskSnapshot | null): IssueCode[] {
   const issues: IssueCode[] = [];
   if (envRisk.is_cdp) issues.push(EnvCodes.ENV_CDP_DETECTED);
   if (envRisk.is_devtools_open) issues.push(EnvCodes.ENV_DEVTOOLS_OPEN);
-  if (envRisk.is_webdriver) issues.push(EnvCodes.ENV_WEBDRIVER);
+  if (envRisk.is_automation) issues.push(EnvCodes.ENV_WEBDRIVER);
   if (envRisk.is_headless) issues.push(EnvCodes.ENV_HEADLESS);
   if (envRisk.is_tampered) issues.push(EnvCodes.ENV_TAMPERED);
   return issues;

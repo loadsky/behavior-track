@@ -48,7 +48,7 @@ export interface EnvRiskSnapshot {
   signals: string[];
   is_cdp: boolean;
   is_devtools_open: boolean;
-  is_webdriver: boolean;
+  is_automation: boolean;
   is_headless: boolean;
   is_tampered: boolean;
 }

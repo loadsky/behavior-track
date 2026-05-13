@@ -23,24 +23,15 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
     ...worker.signals,
   ];
 
-  // webdriver 检测：主框架 + iframe 两层检测同一根因，只计一次
-  const hasWebdriver = automation.is_webdriver || iframe.is_webdriver;
+  const hasAutomation = automation.is_automation || iframe.is_automation;
   // CDP 检测：三层（主框架/iframe/worker）检测同一根因，只计一次
   const hasCdp = devtools.is_cdp || iframe.is_cdp || worker.is_cdp;
 
   // 自动化/机器人信号：递减权重避免简单叠加
   const autoSignals: { weight: number }[] = [];
-  if (hasWebdriver) autoSignals.push({ weight: 50 });
+  if (hasAutomation) autoSignals.push({ weight: 50 });
   if (headless.is_headless) autoSignals.push({ weight: 50 });
   if (hasCdp && !devtools.is_open) autoSignals.push({ weight: 50 });
-
-  // Selenium/Nightmare/Sequentum 来自 automation.signals
-  const hasSelenium = automation.signals.includes('selenium_cdc') || automation.signals.includes('selenium_cdc_array');
-  const hasNightmare = automation.signals.includes('nightmare');
-  const hasSequentum = automation.signals.includes('sequentum');
-  if (hasSelenium) autoSignals.push({ weight: 50 });
-  if (hasNightmare) autoSignals.push({ weight: 50 });
-  if (hasSequentum) autoSignals.push({ weight: 50 });
 
   autoSignals.sort((a, b) => b.weight - a.weight);
 
@@ -61,13 +52,10 @@ export async function collectEnvironment(): Promise<RiskIndicators> {
   riskScore = Math.min(Math.round(riskScore), 100);
 
   return {
-    is_webdriver: hasWebdriver,
+    is_automation: hasAutomation,
     is_headless: headless.is_headless,
     is_devtools_open: devtools.is_open,
     is_cdp: hasCdp,
-    is_selenium: hasSelenium,
-    is_nightmare: hasNightmare,
-    is_sequentum: hasSequentum,
     is_tampered: consistency.is_mismatch || iframe.is_overridden || worker.is_tampered || devtools.is_tampered || iframe.is_tampered,
     is_proxy: false,
     is_suspicious_client: false,

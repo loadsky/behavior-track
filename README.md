@@ -122,7 +122,7 @@ SDK 通过 6 个子检测器生成风险评分 (0-100)：
 - iframe: 原型链覆写、contentWindow 引用一致性，并利用未污染帧交叉验证 CDP / 属性描述符
 - worker-detect: Web Worker 内 navigator 字段、CDP 与主线程比对
 
-`is_webdriver` / `is_cdp` 在主框架、iframe、Worker 三层检测时只计一次；自动化强信号递减叠加（权重 50，0.5^i 衰减），再叠加若干弱信号（devtools open / is_tampered / worker 不一致等）。
+`is_automation` / `is_cdp` 在主框架、iframe、Worker 三层检测时只计一次；自动化强信号递减叠加（权重 50，0.5^i 衰减），再叠加若干弱信号（devtools open / is_tampered / worker 不一致等）。
 
 ## 表单检测信号
 

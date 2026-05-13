@@ -154,11 +154,10 @@ SDK 对外仅暴露一个单例对象（`src/index.ts`）：
 
 | 字段 | 含义 |
 |---|---|
-| `is_webdriver` | 主框架或 iframe 任一层命中 webdriver/自动化标志（跨层去重只计一次） |
+| `is_automation` | 主框架或 iframe 任一层命中自动化标志 |
 | `is_headless` | 无头浏览器特征累计 ≥2 |
 | `is_devtools_open` | DevTools 打开（尺寸比值或 getter-trap） |
 | `is_cdp` | 主框架 / iframe / Worker 任一层命中 `Error.prepareStackTrace` runtime 钩子 |
-| `is_selenium` / `is_nightmare` / `is_sequentum` | 对应工具特征残留 |
 | `is_tampered` | UA/属性描述符/iframe 原型/Worker 任一维度被篡改 |
 | `is_proxy` | 预留，当前恒 false |
 | `is_suspicious_client` / `is_super_speed` / `is_mouse_leak` | 表单三大专项信号（由 FormDetector 合并回 SDK） |
@@ -230,7 +229,7 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 | `nightmare` | `window.__nightmare` | Nightmare |
 | `sequentum` | `String(window.external).includes('Sequentum')` | Sequentum 爬虫浏览器 |
 
-`is_webdriver = signals.length > 0`（任一命中即为 true）。
+`is_automation = signals.length > 0`（任一命中即为 true）。
 
 #### 3.4.2 `headless.ts` — 无头浏览器
 
@@ -278,10 +277,10 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 | `iframe_setTimeout_same` | `cw.setTimeout === window.setTimeout` | 正常 iframe 有独立 window，引用应不同 |
 | `iframe_webdriver` | `cw.navigator.webdriver` | iframe 内的 webdriver 标志 |
 | `cdp_iframe` | 在 iframe 未污染的环境内执行 `Error.prepareStackTrace` 钩子探测命中 | 利用未污染帧跨帧交叉验证 CDP |
-| `iframe_prop_tampered` | 用 iframe 的 `Function.prototype.toString` 反查主窗口 `outerWidth` getter 非 `[native code]` | 跨帧揭露主框架属性描述符被改 |
+| `iframe_native_*` | 用 iframe 干净的 `Function.prototype.toString` 反查主框架属性 getter（outerWidth/webdriver/userAgent/platform 等）非 `[native code]` | 跨帧揭露主框架属性描述符被改 |
 | `iframe_console_tampered` | iframe 的 `console.debug.toString()` 非 `[native code]` | iframe 内 console 被全局污染 |
 
-`is_overridden` 聚合前三条（不含 webdriver/CDP/篡改），`is_webdriver` / `is_cdp` / `is_tampered` 各自独立暴露，供聚合器按权重叠加。
+`is_overridden` 聚合前三条（不含 automation/CDP/篡改），`is_automation` / `is_cdp` / `is_tampered` 各自独立暴露，供聚合器按权重叠加。
 
 #### 3.4.6 `worker-detect.ts` — Web Worker 一致性
 
@@ -297,10 +296,10 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 #### 3.4.7 聚合与 `risk_score` 计算（`environment/index.ts`）
 
 先对跨层同根因信号做**去重合并**：
-- `hasWebdriver = automation.is_webdriver || iframe.is_webdriver`
+- `hasAutomation = automation.is_automation || iframe.is_automation`
 - `hasCdp = devtools.is_cdp || iframe.is_cdp || worker.is_cdp`
 
-自动化强信号先汇总到 `autoSignals[]`（每条 50 分）：`hasWebdriver` / `headless.is_headless` / `devtools.is_tampered` / `hasCdp && !devtools.is_open` / `selenium_cdc*` / `nightmare` / `sequentum`。
+自动化强信号先汇总到 `autoSignals[]`（每条 50 分）：`hasAutomation` / `headless.is_headless` / `hasCdp && !devtools.is_open`。
 
 **递减叠加算法**（避免简单累加饱和）：
 
@@ -469,7 +468,7 @@ action 点击还会重置一个 `ActionClickState`（记录 count/centered/corne
 
 ##### (D) 环境 issues 归并
 
-除上述三大信号外，`FormDetector` 还通过 `collectEnvIssues(envRisk)` 将环境风险快照 (`is_cdp/is_devtools_open/is_webdriver/is_headless/is_tampered`) 翻译为 `env_cdp_detected/env_devtools_open/env_webdriver/env_headless/env_tampered` 追加到 `issues`，便于业务端看到完整上下文。
+除上述三大信号外，`FormDetector` 还通过 `collectEnvIssues(envRisk)` 将环境风险快照 (`is_cdp/is_devtools_open/is_automation/is_headless/is_tampered`) 翻译为 `env_cdp_detected/env_devtools_open/env_webdriver/env_headless/env_tampered` 追加到 `issues`，便于业务端看到完整上下文。
 
 ##### (E) 风险分合并（FormDetector 内部）
 
@@ -615,7 +614,7 @@ pnpm test             # Vitest（当前 tests 目录为空）
 node scripts/test-risk.mjs   # Playwright 驱动三种浏览器环境回归
 ```
 
-`scripts/test-risk.mjs` 自动：启本地 HTTP server、依次启动 Headless/Headful/CDP 三种 Chromium、页面内调用 BehaviorTrack 采集风险、终端打印 `is_webdriver / is_cdp / risk_score / signals`。
+`scripts/test-risk.mjs` 自动：启本地 HTTP server、依次启动 Headless/Headful/CDP 三种 Chromium、页面内调用 BehaviorTrack 采集风险、终端打印 `is_automation / is_cdp / risk_score / signals`。
 
 `examples/index.html` 是基于 Vue3 + Tailwind 的可视化控制台，提供 SDK 初始化/暂停/恢复/销毁、环境面板刷新、模拟登录表单、行为统计展示。
 
@@ -655,11 +654,11 @@ node scripts/test-risk.mjs   # Playwright 驱动三种浏览器环境回归
 
 ```
 // 跨层同根因信号先去重
-hasWebdriver = automation.is_webdriver || iframe.is_webdriver
-hasCdp       = devtools.is_cdp || iframe.is_cdp || worker.is_cdp
+hasAutomation = automation.is_automation || iframe.is_automation
+hasCdp        = devtools.is_cdp || iframe.is_cdp || worker.is_cdp
 
 autoSignals = []  // weight=50 each
-  if hasWebdriver → push
+  if hasAutomation → push
   if 无头特征 ≥2 → push
   if devtools.is_tampered（描述符/console/toString 篡改） → push
   if hasCdp && !devtools.is_open → push
@@ -792,7 +791,7 @@ integrity_check = sha256(fastJsonStableStringify(payload))
 | 14 | ~~表单 `keydown` 监听未 `passive`，Enter 触发 `analyze()` 同步执行~~ | 全部监听改 `{ passive: true }`；Enter/action 走 `scheduleAnalyze()`，`requestIdleCallback`(200ms timeout) 异步合并执行 ✅ |
 | 15 | ~~行为流 `mouse_tracks` 无上限~~ | `MouseTracker` 拆 `moves/clicks` 双缓冲，各自"时间窗 60s + 容量"双门控；mousemove 默认聚合为 `move_features` ✅ |
 | 16 | ~~mousemove/scroll 全量上报信噪比低~~ | 常态上报聚合标量；`uploadRawStreamOnRisk` + `rawStreamRiskThreshold` + `rawStreamWindowBatches` 按风险窗口追带 `raw_on_risk` ✅ |
-| 17 | ~~webdriver / CDP 跨层检测重复加权~~ | 聚合器对 `hasWebdriver` / `hasCdp` 做去重合并只计一次 ✅ |
+| 17 | ~~webdriver / CDP 跨层检测重复加权~~ | 聚合器对 `hasAutomation` / `hasCdp` 做去重合并只计一次 ✅ |
 | 18 | ~~风控评分调节不灵活~~ | 新增 `disableSignals` 允许把指定布尔信号强制置 false，跳过评分 ✅ |
 | 19 | ~~缺少运行时可观测性~~ | 新增 `error_counts` + `getDiagnostics()` + `resetSession()` API ✅ |
 | 20 | ~~移动端头无头判据误报~~ | `detectHeadless` 通过 UAParser 识别 mobile/tablet 后跳过 `no_plugins` / `chrome_obj_missing` ✅ |

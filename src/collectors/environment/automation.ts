@@ -3,7 +3,7 @@ import { safeExec } from '../../utils/safe-exec';
 const SCOPE = 'automation';
 
 export interface AutomationResult {
-  is_webdriver: boolean;
+  is_automation: boolean;
   signals: string[];
 }
 
@@ -86,7 +86,7 @@ export function detectAutomation(): AutomationResult {
   }, undefined, SCOPE);
 
   return {
-    is_webdriver: signals.length > 0,
+    is_automation: signals.length > 0,
     signals,
   };
 }

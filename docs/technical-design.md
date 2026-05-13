@@ -28,7 +28,7 @@
 
 #### 自动化工具特征
 
-命中以下任一特征即判定 `is_webdriver = true`：
+命中以下任一特征即判定 `is_automation = true`：
 
 - webdriver：`navigator.webdriver === true`
 - Selenium 相关属性：`selenium_unwrapped` / `webdriver_evaluate` / `driver_evaluate` / `webdriver_script_fn` / `selenium_cdc` / `selenium_cdc_array`
@@ -72,7 +72,7 @@
 - `iframe_setTimeout_same`：iframe 内的`setTimeout` 与主窗口引用相同
 - `iframe_webdriver`：iframe 内检测到 webdriver 信号
 - `cdp_iframe`：iframe 内识别到 CDP 特征
-- `iframe_prop_tampered`：iframe 内获取到非原生的属性描述符
+- `iframe_native_*`：iframe 干净 toString 反查主框架属性 getter 非原生（outerWidth/webdriver 等）
 - `iframe_console_tampered`：iframe 内 `console.debug` 不是原生代码
 
 #### Web Worker 交叉验证
@@ -80,11 +80,11 @@
 - `cdp_worker`：Worker 内识别到 CDP 特征
 
 #### 聚合输出 `risk_indicators`
-- `is_webdriver`：识别到任一自动化工具特征
+- `is_automation`：识别到任一自动化工具特征
 - `is_headless`：无头浏览器特征信号 ≥2
 - `is_devtools_open`：通过窗口尺寸或 `getter_trap` 检测到 DevTools 开启
 - `is_cdp`：在 runtime / iframe / worker 任一环境命中 CDP 检测
-- `is_selenium` / `is_nightmare` / `is_sequentum`：命中对应自动化工具
+- `is_automation`：识别到任一自动化工具特征（具体工具名见 `signals` 数组）
 - `is_tampered`：原生对象信息存在篡改迹象
 - `is_proxy`：预留字段
 - `risk_score`：加权计算得出的 0～100 风险评分（见 §3.3 评分逻辑）
@@ -199,8 +199,8 @@ BehaviorTrack.destroy(): void                                 // 卸载事件、
   page_context: { url, host, title, referrer, lang, timezone, cookie_enabled },
   user_agent, browser, browser_version, os, device_type,
   risk_indicators: {
-    is_webdriver, is_headless, is_devtools_open, is_cdp,
-    is_selenium, is_nightmare, is_sequentum, is_tampered, is_proxy,
+    is_automation, is_headless, is_devtools_open, is_cdp,
+    is_tampered, is_proxy,
     is_suspicious_client, is_super_speed, is_mouse_leak,
     risk_score,                  // 0-100
     signals: string[]            // 所有命中的子信号

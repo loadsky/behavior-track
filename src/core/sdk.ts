@@ -163,13 +163,10 @@ export class BehaviorTrackSDK {
       os: uaInfo.os,
       device_type: uaInfo.device_type,
       risk_indicators: riskIndicators ?? {
-        is_webdriver: false,
+        is_automation: false,
         is_headless: false,
         is_devtools_open: false,
         is_cdp: false,
-        is_selenium: false,
-        is_nightmare: false,
-        is_sequentum: false,
         is_tampered: false,
         is_proxy: false,
         is_suspicious_client: false,
@@ -231,7 +228,7 @@ export class BehaviorTrackSDK {
       signals: ri.signals,
       is_cdp: ri.is_cdp,
       is_devtools_open: ri.is_devtools_open,
-      is_webdriver: ri.is_webdriver,
+      is_automation: ri.is_automation,
       is_headless: ri.is_headless,
       is_tampered: ri.is_tampered,
     };

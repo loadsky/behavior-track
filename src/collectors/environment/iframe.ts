@@ -4,7 +4,7 @@ const SCOPE = 'iframe';
 
 export interface IframeResult {
   is_overridden: boolean;
-  is_webdriver: boolean;
+  is_automation: boolean;
   is_cdp: boolean;
   is_tampered: boolean;
   signals: string[];
@@ -47,14 +47,26 @@ export function detectIframe(): IframeResult {
         if (cdpTriggered) signals.push('cdp_iframe');
       } catch { /* sandbox restriction */ }
 
-      // 利用 iframe 未污染的 Function.prototype.toString 检测主框架属性篡改
+      // 利用 iframe 干净环境的 Function.prototype.toString 交叉验证主框架属性原生性
       try {
         const cwAny = cw as unknown as Record<string, unknown>;
         const cwFnToStr = (cwAny.Function as typeof Function).prototype.toString;
-        const mainDesc = Object.getOwnPropertyDescriptor(window, 'outerWidth');
-        if (mainDesc && mainDesc.get) {
-          const fnStr = cwFnToStr.call(mainDesc.get);
-          if (!/\[native code\]/.test(fnStr)) signals.push('iframe_prop_tampered');
+        const targets: Array<{ obj: unknown; path: string }> = [
+          { obj: window, path: 'outerWidth' },
+          { obj: window, path: 'outerHeight' },
+          { obj: navigator, path: 'webdriver' },
+          { obj: navigator, path: 'userAgent' },
+          { obj: navigator, path: 'platform' },
+          { obj: screen, path: 'width' },
+          { obj: screen, path: 'height' },
+          { obj: screen, path: 'colorDepth' },
+        ];
+        for (const { obj, path } of targets) {
+          const desc = Object.getOwnPropertyDescriptor(obj, path);
+          if (desc && desc.get) {
+            const fnStr = cwFnToStr.call(desc.get);
+            if (!/\[native code\]/.test(fnStr)) signals.push(`iframe_native_${path}`);
+          }
         }
       } catch { /* sandbox restriction */ }
 
@@ -73,10 +85,10 @@ export function detectIframe(): IframeResult {
   }, undefined, SCOPE);
 
   return {
-    is_overridden: signals.some(s => s.startsWith('iframe_') && s !== 'iframe_webdriver' && s !== 'cdp_iframe' && s !== 'iframe_console_tampered' && s !== 'iframe_prop_tampered'),
-    is_webdriver: signals.includes('iframe_webdriver'),
+    is_overridden: ['iframe_self_overridden', 'iframe_contentWindow_eq_window', 'iframe_setTimeout_same'].some(s => signals.includes(s)),
+    is_automation: signals.includes('iframe_webdriver') || signals.includes('iframe_native_webdriver'),
     is_cdp: signals.includes('cdp_iframe') || signals.includes('iframe_console_tampered'),
-    is_tampered: signals.includes('iframe_prop_tampered'),
+    is_tampered: signals.some(s => s.startsWith('iframe_native_')),
     signals,
   };
 }
