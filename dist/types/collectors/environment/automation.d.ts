@@ -1,5 +1,5 @@
 export interface AutomationResult {
-    is_webdriver: boolean;
+    is_automation: boolean;
     signals: string[];
 }
 export declare function detectAutomation(): AutomationResult;

@@ -1,11 +1,8 @@
 export interface RiskIndicators {
-    is_webdriver: boolean;
+    is_automation: boolean;
     is_headless: boolean;
     is_devtools_open: boolean;
     is_cdp: boolean;
-    is_selenium: boolean;
-    is_nightmare: boolean;
-    is_sequentum: boolean;
     is_tampered: boolean;
     is_proxy: boolean;
     is_suspicious_client: boolean;
