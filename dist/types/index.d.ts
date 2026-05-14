@@ -1,3 +1,4 @@
+import './polyfill';
 import type { SDKConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig } from './types';
 declare const BehaviorTrack: {
     init: (config: SDKConfig) => Promise<void>;
@@ -14,5 +15,5 @@ declare const BehaviorTrack: {
     };
     destroy: () => void;
 };
-export { BehaviorTrack };
+export default BehaviorTrack;
 export type { SDKConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig };
