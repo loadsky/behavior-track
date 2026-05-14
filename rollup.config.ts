@@ -63,5 +63,11 @@ export default defineConfig({
       },
     }),
     production && visualizer({ filename: 'dist/stats.html', gzipSize: true }),
+    {
+      name: 'compat-chrome60',
+      renderChunk(code) {
+        return { code: code.replace(/\bcatch\s*\{/g, 'catch(_){'), map: null };
+      },
+    },
   ],
 });

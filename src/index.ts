@@ -1,3 +1,4 @@
+import './polyfill';
 import { BehaviorTrackSDK } from './core/sdk';
 import type { SDKConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig } from './types';
 
@@ -15,5 +16,5 @@ const BehaviorTrack = {
   destroy: () => instance.destroy(),
 };
 
-export { BehaviorTrack };
+export default BehaviorTrack;
 export type { SDKConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig };

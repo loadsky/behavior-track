@@ -105,9 +105,8 @@ export class FormDetector {
       this.analyzeScheduled = false;
       this.analyze();
     };
-    const ric = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-    if (typeof ric === 'function') {
-      ric(run, { timeout: 200 });
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(run, { timeout: 200 });
     } else {
       setTimeout(run, 0);
     }
@@ -131,7 +130,7 @@ export class FormDetector {
 
     // 合并环境风险 issues 与表单行为 issues
     const envIssues = collectEnvIssues(this.envRisk);
-    const issues = [...results.flatMap(r => r.result.codes), ...envIssues];
+    const issues = results.reduce((acc, r) => { acc.push(...r.result.codes); return acc; }, envIssues.slice());
 
     // 提取已触发信号的权重，按降序用于衰减评分
     const formSignals = results
@@ -147,13 +146,14 @@ export class FormDetector {
     riskScore = Math.min(Math.round(riskScore), 100);
 
     // 将各检测项 triggered 状态组装为 FormSignalResults
-    const signals = Object.fromEntries(results.map(r => [r.key, r.result.triggered])) as unknown as FormSignalResults;
+    const signals: Record<string, boolean> = {};
+    for (const r of results) signals[r.key] = r.result.triggered;
 
     const result: FormDetectionResult = {
       // 40 分为风险阈值，低于此值视为通过
       is_pass: riskScore < 40,
       risk_score: riskScore,
-      signals,
+      signals: signals as unknown as FormSignalResults,
       issues,
       timestamp: Date.now(),
     };
