@@ -1,5 +1,6 @@
 import './polyfill';
 import { BehaviorTrackSDK } from './core/sdk';
+import type { FormDetectorInstance } from './core/sdk';
 import type { SDKConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig } from './types';
 
 const instance = new BehaviorTrackSDK();
@@ -8,7 +9,7 @@ const BehaviorTrack = {
   init: (config: SDKConfig) => instance.init(config),
   getEnvInfo: () => instance.getEnvInfo(),
   onBehaviorReport: (callback: (data: BehaviorStreamReport) => void) => instance.onBehaviorReport(callback),
-  detect: (config: FormDetectConfig) => instance.detect(config),
+  createDetector: (config: Omit<FormDetectConfig, 'onResult'>) => instance.createDetector(config),
   pause: () => instance.pause(),
   resume: () => instance.resume(),
   resetSession: () => instance.resetSession(),
@@ -17,4 +18,4 @@ const BehaviorTrack = {
 };
 
 export default BehaviorTrack;
-export type { SDKConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig };
+export type { SDKConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig, FormDetectorInstance };

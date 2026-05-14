@@ -26,15 +26,13 @@ export class FormDetector {
 
   private collector: EventCollector;
   private lastResult: FormDetectionResult | null = null;
-  private analyzeScheduled = false;
   private unsubscribeDoc: (() => void) | null = null;
   private envRisk: EnvRiskSnapshot | null = null;
 
   constructor(config: FormDetectConfig) {
     this.config = config;
     if (config.envRisk) this.envRisk = config.envRisk;
-    // action 按钮或 Enter 键触发时调度分析
-    this.collector = new EventCollector({ onSubmitAction: () => this.scheduleAnalyze() });
+    this.collector = new EventCollector();
     this.resolveAndBind();
   }
 
@@ -97,24 +95,14 @@ export class FormDetector {
     });
   }
 
-  // 调度分析任务，优先使用 requestIdleCallback 避免阻塞主线程，200ms 超时兜底
-  private scheduleAnalyze(): void {
-    if (this.destroyed || this.analyzeScheduled) return;
-    this.analyzeScheduled = true;
-    const run = () => {
-      this.analyzeScheduled = false;
-      this.analyze();
-    };
-    if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(run, { timeout: 200 });
-    } else {
-      setTimeout(run, 0);
-    }
+  detect(): Promise<FormDetectionResult> {
+    return Promise.resolve(this.analyze());
   }
 
-  // 核心分析入口：获取数据快照 → 遍历分析表 → 计算综合风险分
-  private analyze(): void {
-    if (this.destroyed || !this.container) return;
+  private analyze(): FormDetectionResult {
+    if (this.destroyed || !this.container) {
+      return { is_pass: true, risk_score: 0, signals: { is_suspicious_client: false, is_super_speed: false, is_mouse_leak: false }, issues: [], timestamp: Date.now() };
+    }
 
     const data = this.collector.snapshot(this.container);
     // disableSignals 中的检测项跳过执行，直接返回空结果
@@ -161,7 +149,9 @@ export class FormDetector {
     this.lastResult = result;
 
     safeExec(() => {
-      this.config.onResult(result);
+      this.config.onResult?.(result);
     }, undefined, SCOPE);
+
+    return result;
   }
 }

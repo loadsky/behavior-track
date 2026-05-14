@@ -67,15 +67,17 @@ const env = await BehaviorTrack.getEnvInfo();
 ### 表单检测
 
 ```ts
-BehaviorTrack.detect({
+const formDetector = BehaviorTrack.createDetector({
   containerSelector: '#login-form',
   actionSelector: '#login-btn',
-  onResult: (r) => {
-    if (!r.is_pass) {
-      console.warn('登录风险:', r.risk_score, r.issues);
-    }
-  },
 });
+
+const handleLogin = async () => {
+  const r = await formDetector.detect();
+  if (!r.is_pass) {
+    console.warn('登录风险:', r.risk_score, r.issues);
+  }
+};
 ```
 
 ## API
@@ -85,7 +87,7 @@ BehaviorTrack.detect({
 | `init(config)` | 初始化 SDK，幂等 |
 | `getEnvInfo()` | 获取静态环境报告（设备 ID、指纹、风险分、命中信号） |
 | `onBehaviorReport(cb)` | 订阅行为流批次上报回调 |
-| `detect(config)` | 注册表单检测器，可多次调用监控多个表单 |
+| `createDetector(config)` | 创建表单检测器实例，返回 `{ detect(): Promise<FormDetectionResult>, destroy() }` |
 | `pause()` | 暂停行为采集 |
 | `resume()` | 恢复行为采集 |
 | `resetSession()` | 重置 session_id、序号与诊断错误计数 |

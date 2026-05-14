@@ -32,18 +32,15 @@ export class EventCollector {
     options?: AddEventListenerOptions;
   }> = [];
 
+  private actionEl: HTMLElement | null = null;
   private containerObserver: MutationObserver | null = null;
-  private onSubmitAction: () => void;
-
-  constructor(callbacks: { onSubmitAction: () => void }) {
-    this.onSubmitAction = callbacks.onSubmitAction;
-  }
 
   // 绑定容器内所有表单事件和全局事件监听，启动容器内 DOM 变更观察
   bind(container: HTMLElement, actionEl: HTMLElement | null): void {
+    this.actionEl = actionEl;
     this.scanFields(container);
 
-    this.on(container, 'click', this.handleFieldClick, { passive: true });
+    this.on(container, 'click', this.handleFieldClick, { passive: true, capture: true }); // 在捕获阶段监听 便于尽早获取点击事件特征
     this.on(container, 'input', this.handleFieldInput, { passive: true });
     this.on(container, 'keydown', this.handleFieldKeydown, { passive: true });
     this.on(container, 'compositionstart', this.handleCompositionStart, { passive: true });
@@ -52,11 +49,6 @@ export class EventCollector {
     this.on(document, 'keydown', this.handleGlobalKeydown, { passive: true });
     this.on(document, 'keyup', this.handleGlobalKeyup, { passive: true });
     this.on(document, 'mousemove', this.handleGlobalMouseMove, { passive: true });
-
-    if (actionEl) {
-      this.on(actionEl, 'click', this.handleAction, { passive: true });
-    }
-    this.on(container, 'keydown', this.handleEnterSubmit, { passive: true });
 
     this.containerObserver = new MutationObserver(() => {
       this.scanFields(container);
@@ -165,6 +157,17 @@ export class EventCollector {
     const record = buildClickRecord(me, target, this.lastMouseMove, now);
     this.pushClickRecord(record);
 
+    const isActionClick = this.actionEl !== null && this.actionEl.contains(target);
+    if (isActionClick) {
+      this.resetActionClickState();
+      this.actionClickState.count++;
+      if (!record.hadPrecedingMove && !me.isTrusted) this.actionClickState.noPrecedingMove++;
+      if (me.clientX === 0 && me.clientY === 0 && !me.isTrusted) this.actionClickState.zeroCoord = true;
+      const rect = target.getBoundingClientRect();
+      if (isCenterClick(me.clientX, me.clientY, rect)) this.actionClickState.centered = true;
+      if (isCornerClick(me.clientX, me.clientY, rect)) this.actionClickState.corner = true;
+    }
+
     if (state) {
       state.hadClick = true;
       state.clickCount++;
@@ -255,37 +258,4 @@ export class EventCollector {
     this.lastMouseMove = { x: me.clientX, y: me.clientY, t: performance.now() };
   };
 
-  // action 按钮点击处理：每次点击重置统计，记录特征后触发分析
-  private handleAction = (e: Event): void => {
-    this.resetActionClickState();
-
-    const me = e as MouseEvent;
-    const target = e.target as Element;
-    const now = performance.now();
-
-    const record = buildClickRecord(me, target, this.lastMouseMove, now);
-    this.pushClickRecord(record);
-
-    this.actionClickState.count++;
-
-    if (!record.hadPrecedingMove && !me.isTrusted) this.actionClickState.noPrecedingMove++;
-    if (me.clientX === 0 && me.clientY === 0 && !me.isTrusted) this.actionClickState.zeroCoord = true;
-
-    const rect = target.getBoundingClientRect();
-    if (isCenterClick(me.clientX, me.clientY, rect)) this.actionClickState.centered = true;
-    if (isCornerClick(me.clientX, me.clientY, rect)) this.actionClickState.corner = true;
-
-    this.onSubmitAction();
-  };
-
-  // 表单内 Enter 键提交处理，排除 Shift/Ctrl/Meta 组合键
-  private handleEnterSubmit = (e: Event): void => {
-    const ke = e as KeyboardEvent;
-    if (ke.key === 'Enter' && !ke.shiftKey && !ke.ctrlKey && !ke.metaKey) {
-      const target = e.target as Element;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        this.onSubmitAction();
-      }
-    }
-  };
 }

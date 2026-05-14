@@ -1,5 +1,5 @@
 import type { SDKConfig, ResolvedConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig } from '../types';
-import type { EnvRiskSnapshot } from '../collectors/form-detector/types';
+import type { EnvRiskSnapshot, FormDetectionResult } from '../collectors/form-detector/types';
 import { resolveConfig } from './config';
 import { EventBus } from './event-bus';
 import { Lifecycle } from './lifecycle';
@@ -14,6 +14,11 @@ import { TransportManager } from '../transport';
 import { parseBrowser, getPageContext } from '../utils/browser';
 import { signReport } from '../utils/integrity';
 import { snapshotErrorCounts, resetErrorCounts } from '../utils/diagnostics';
+
+export interface FormDetectorInstance {
+  detect: () => Promise<FormDetectionResult>;
+  destroy: () => void;
+}
 
 export class BehaviorTrackSDK {
   private config!: ResolvedConfig;
@@ -66,9 +71,7 @@ export class BehaviorTrackSDK {
     this.eventBus.on('behavior:report', callback as (...args: unknown[]) => void);
   }
 
-  detect(config: FormDetectConfig): void {
-    if (this.lifecycle.state === 'destroyed') return;
-    const originalOnResult = config.onResult;
+  createDetector(config: Omit<FormDetectConfig, 'onResult'>): FormDetectorInstance {
     const wrapped: FormDetectConfig = {
       ...config,
       envRisk: this.lastEnvSnapshot ?? undefined,
@@ -76,11 +79,19 @@ export class BehaviorTrackSDK {
         if (typeof result.risk_score === 'number' && result.risk_score > this.currentRiskScore) {
           this.currentRiskScore = result.risk_score;
         }
-        originalOnResult?.(result);
       },
     };
     const detector = new FormDetector(wrapped);
     this.formDetectors.push(detector);
+
+    return {
+      detect: () => detector.detect(),
+      destroy: () => {
+        const idx = this.formDetectors.indexOf(detector);
+        if (idx !== -1) this.formDetectors.splice(idx, 1);
+        detector.destroy();
+      },
+    };
   }
 
   pause(): void {
