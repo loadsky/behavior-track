@@ -13,11 +13,8 @@ export declare class EventCollector {
     private lastInputTime;
     private actionClickState;
     private boundHandlers;
+    private actionEl;
     private containerObserver;
-    private onSubmitAction;
-    constructor(callbacks: {
-        onSubmitAction: () => void;
-    });
     bind(container: HTMLElement, actionEl: HTMLElement | null): void;
     scanFields(container: HTMLElement): void;
     snapshot(container: HTMLElement): CollectedData;
@@ -36,6 +33,4 @@ export declare class EventCollector {
     private handleGlobalKeydown;
     private handleGlobalKeyup;
     private handleGlobalMouseMove;
-    private handleAction;
-    private handleEnterSubmit;
 }

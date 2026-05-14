@@ -44,7 +44,7 @@ export interface EnvRiskSnapshot {
 export interface FormDetectConfig {
     containerSelector: string;
     actionSelector: string;
-    onResult: (result: FormDetectionResult) => void;
+    onResult?: (result: FormDetectionResult) => void;
     envRisk?: EnvRiskSnapshot;
     disableSignals?: Array<keyof FormSignalResults>;
 }

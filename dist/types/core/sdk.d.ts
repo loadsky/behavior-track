@@ -1,4 +1,9 @@
 import type { SDKConfig, EnvStaticReport, BehaviorStreamReport, FormDetectConfig } from '../types';
+import type { FormDetectionResult } from '../collectors/form-detector/types';
+export interface FormDetectorInstance {
+    detect: () => Promise<FormDetectionResult>;
+    destroy: () => void;
+}
 export declare class BehaviorTrackSDK {
     private config;
     private eventBus;
@@ -17,7 +22,7 @@ export declare class BehaviorTrackSDK {
     init(config: SDKConfig): Promise<void>;
     getEnvInfo(): Promise<EnvStaticReport>;
     onBehaviorReport(callback: (data: BehaviorStreamReport) => void): void;
-    detect(config: FormDetectConfig): void;
+    createDetector(config: Omit<FormDetectConfig, 'onResult'>): FormDetectorInstance;
     pause(): void;
     resume(): void;
     resetSession(): string;

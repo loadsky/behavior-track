@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BehaviorTrack SDK 功能测试</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script>
     tailwind.config = {
@@ -476,6 +476,7 @@
           _keyIntervals: [],
 
           // SDK 表单检测结果
+          formDetector: null,
           formResult: null,
           loginHint: '',
           transportLogs: [],
@@ -579,16 +580,9 @@
             };
 
             // 使用 SDK 内置表单检测
-            BehaviorTrack.detect({
+            this.formDetector = BehaviorTrack.createDetector({
               containerSelector: '#login-form',
               actionSelector: '#login-btn',
-              onResult: (result) => {
-                // 将原因标识映射为可读文本
-                const labels = result.issues.map(c => this._issueLabels[c] || c);
-                this.formResult = { ...result, issues: labels };
-                this.log(`表单检测数据: ${JSON.stringify(result, null, 2)}`);
-                this.log(`SDK 表单检测: ${result.is_pass ? '通过' : '可疑'} — 评分 ${result.risk_score}/100${labels.length ? ' — ' + labels.join('; ') : ''}`);
-              },
             });
 
             await this.refreshEnv();
@@ -733,12 +727,21 @@
           }
         },
 
-        handleLogin() {
+        async handleLogin() {
           if (this.sdkState !== 'active') {
             this.loginHint = '请先点击上方「初始化」按钮启动 SDK';
             return;
           }
           this.loginHint = '';
+          try {
+            const result = await this.formDetector.detect();
+            const labels = result.issues.map(c => this._issueLabels[c] || c);
+            this.formResult = { ...result, issues: labels };
+            this.log(`表单检测数据: ${JSON.stringify(result, null, 2)}`);
+            this.log(`SDK 表单检测: ${result.is_pass ? '通过' : '可疑'} — 评分 ${result.risk_score}/100${labels.length ? ' — ' + labels.join('; ') : ''}`);
+          } catch (e) {
+            this.log('表单检测失败: ' + e.message);
+          }
         },
 
       },
