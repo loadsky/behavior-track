@@ -72,8 +72,8 @@
 - `iframe_setTimeout_same`：iframe 内的`setTimeout` 与主窗口引用相同
 - `iframe_webdriver`：iframe 内检测到 webdriver 信号
 - `cdp_iframe`：iframe 内识别到 CDP 特征
-- `iframe_native_*`：iframe 干净 toString 反查主框架属性 getter 非原生（outerWidth/webdriver 等）
-- `iframe_console_tampered`：iframe 内 `console.debug` 不是原生代码
+- `iframe_tampered_*`：iframe 干净 toString 反查主框架属性 getter 非原生（outerWidth/webdriver 等）
+- `iframe_tampered_console`：iframe 内 `console.debug` 不是原生代码
 
 #### Web Worker 交叉验证
 - `worker_webdriver_mismatch` / `worker_ua_mismatch` / `worker_hw_mismatch` / `worker_platform_mismatch` / `worker_languages_mismatch`：上述字段在 Worker 与主线程中不一致

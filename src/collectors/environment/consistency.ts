@@ -38,13 +38,6 @@ export function detectConsistency(): ConsistencyResult {
   }, undefined, SCOPE);
 
   safeExec(() => {
-    const fnStr = navigator.userAgent.toString();
-    if (!fnStr.includes('[native code]') && fnStr.includes('function')) {
-      signals.push('ua_tampered');
-    }
-  }, undefined, SCOPE);
-
-  safeExec(() => {
     const navProto = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');
     if (navProto && navProto.get && !isNativeFn(navProto.get)) {
       signals.push('navigator_proxy');

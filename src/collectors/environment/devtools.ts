@@ -65,17 +65,13 @@ export function detectDevtools(): DevtoolsResult {
     if (!isNativeFn(console.debug)) signals.push('console_tampered');
   }, undefined, SCOPE);
 
-  safeExec(() => {
-    if (!isNativeFn(Function.prototype.toString)) signals.push('tostring_tampered');
-  }, undefined, SCOPE);
 
   const dedupedSignals = [...new Set(signals)];
 
   const hasSizeDiff = dedupedSignals.includes('size_diff');
   const hasCdp = dedupedSignals.includes('cdp_runtime');
   const hasTampered = dedupedSignals.includes('prop_descriptor_tampered')
-    || dedupedSignals.includes('console_tampered')
-    || dedupedSignals.includes('tostring_tampered');
+    || dedupedSignals.includes('console_tampered');
 
   return {
     is_open: hasSizeDiff || dedupedSignals.includes('getter_trap'),

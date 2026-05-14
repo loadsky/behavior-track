@@ -1,4 +1,5 @@
 import { safeExec } from '../../utils/safe-exec';
+import { isNativeFn } from '../../utils/native-check';
 
 const SCOPE = 'iframe';
 
@@ -29,9 +30,9 @@ export function detectIframe(): IframeResult {
       if (cw.setTimeout === window.setTimeout) signals.push('iframe_setTimeout_same');
       if (cw.navigator?.webdriver) signals.push('iframe_webdriver');
 
-      // 多帧交叉验证：利用 iframe 内未被污染的原生环境重复核心检测
+      const cwAny = cw as unknown as Record<string, unknown>;
+
       try {
-        const cwAny = cw as unknown as Record<string, unknown>;
         let cdpTriggered = false;
         const CwError = cwAny.Error as unknown as Record<string, unknown>;
         const origPrepare = CwError.prepareStackTrace;
@@ -49,9 +50,7 @@ export function detectIframe(): IframeResult {
 
       // 利用 iframe 干净环境的 Function.prototype.toString 交叉验证主框架属性原生性
       try {
-        const cwAny = cw as unknown as Record<string, unknown>;
-        const cwFnToStr = (cwAny.Function as typeof Function).prototype.toString;
-        const targets: Array<{ obj: unknown; path: string }> = [
+        const targets: Array<{ obj: object; path: string }> = [
           { obj: window, path: 'outerWidth' },
           { obj: window, path: 'outerHeight' },
           { obj: navigator, path: 'webdriver' },
@@ -63,21 +62,20 @@ export function detectIframe(): IframeResult {
         ];
         for (const { obj, path } of targets) {
           const desc = Object.getOwnPropertyDescriptor(obj, path);
-          if (desc && desc.get) {
-            const fnStr = cwFnToStr.call(desc.get);
-            if (!/\[native code\]/.test(fnStr)) signals.push(`iframe_native_${path}`);
+          if (desc && desc.get && !isNativeFn(desc.get)) {
+            signals.push(`iframe_tampered_${path}`);
           }
         }
-      } catch { /* sandbox restriction */ }
 
-      // iframe 内检测 console 函数原生性
-      try {
-        const cwAny = cw as unknown as Record<string, unknown>;
-        const cwFn = cwAny.Function as typeof Function;
+        // 检测 console 函数原生性
         const cwConsole = cwAny.console as Console;
-        const cwFnToStr = cwFn.prototype.toString;
-        const debugStr = cwFnToStr.call(cwConsole.debug);
-        if (!/\[native code\]/.test(debugStr)) signals.push('iframe_console_tampered');
+        if (!isNativeFn(cwConsole.debug)) {
+          signals.push('iframe_tampered_console');
+        }
+
+        if (!isNativeFn(Function.prototype.toString)) {
+          signals.push('iframe_tampered_tostring');
+        }
       } catch { /* sandbox restriction */ }
     }
 
@@ -86,9 +84,9 @@ export function detectIframe(): IframeResult {
 
   return {
     is_overridden: ['iframe_self_overridden', 'iframe_contentWindow_eq_window', 'iframe_setTimeout_same'].some(s => signals.includes(s)),
-    is_automation: signals.includes('iframe_webdriver') || signals.includes('iframe_native_webdriver'),
-    is_cdp: signals.includes('cdp_iframe') || signals.includes('iframe_console_tampered'),
-    is_tampered: signals.some(s => s.startsWith('iframe_native_')),
+    is_automation: signals.includes('iframe_webdriver') || signals.includes('iframe_tampered_webdriver'),
+    is_cdp: signals.includes('cdp_iframe') || signals.includes('iframe_tampered_console'),
+    is_tampered: signals.some(s => s.startsWith('iframe_tampered_')),
     signals,
   };
 }

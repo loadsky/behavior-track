@@ -277,8 +277,8 @@ SDK 的**核心价值点**，由 6 个子检测器 + 聚合器组成。
 | `iframe_setTimeout_same` | `cw.setTimeout === window.setTimeout` | 正常 iframe 有独立 window，引用应不同 |
 | `iframe_webdriver` | `cw.navigator.webdriver` | iframe 内的 webdriver 标志 |
 | `cdp_iframe` | 在 iframe 未污染的环境内执行 `Error.prepareStackTrace` 钩子探测命中 | 利用未污染帧跨帧交叉验证 CDP |
-| `iframe_native_*` | 用 iframe 干净的 `Function.prototype.toString` 反查主框架属性 getter（outerWidth/webdriver/userAgent/platform 等）非 `[native code]` | 跨帧揭露主框架属性描述符被改 |
-| `iframe_console_tampered` | iframe 的 `console.debug.toString()` 非 `[native code]` | iframe 内 console 被全局污染 |
+| `iframe_tampered_*` | 用 iframe 干净的 `Function.prototype.toString` 反查主框架属性 getter（outerWidth/webdriver/userAgent/platform 等）非 `[native code]` | 跨帧揭露主框架属性描述符被改 |
+| `iframe_tampered_console` | iframe 的 `console.debug.toString()` 非 `[native code]` | iframe 内 console 被全局污染 |
 
 `is_overridden` 聚合前三条（不含 automation/CDP/篡改），`is_automation` / `is_cdp` / `is_tampered` 各自独立暴露，供聚合器按权重叠加。
 
